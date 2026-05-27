@@ -1,116 +1,258 @@
 import cv2
 import numpy as np
-from topview.field_landmarks import FIELD_W, FIELD_H
+from topview.field_landmarks import LANDMARKS, FIELD_W, FIELD_H
 
-# 한글 윈도우 이름은 Windows OpenCV에서 namedWindow/imshow 불일치를 유발함
-WINDOW = "MatchVision - Corner Selection"
+WINDOW = "MatchVision - Landmark Selection"
 
-_ZOOM_SIZE   = 140
-_ZOOM_FACTOR = 5
+# Field diagram geometry
+_PAD    = 22
+_SCALE  = 4.0
+_DIAG_W = int(FIELD_W * _SCALE) + 2 * _PAD   # 462
+_DIAG_H = int(FIELD_H * _SCALE) + 2 * _PAD   # 314
 
-# 클릭 순서 고정: 좌상 → 우상 → 우하 → 좌하
-_CORNER_NAMES: list[str] = ["좌상 코너", "우상 코너", "우하 코너", "좌하 코너"]
-_CORNER_COORDS: list[tuple[float, float]] = [
-    (0.0,    0.0),
-    (FIELD_W, 0.0),
-    (FIELD_W, FIELD_H),
-    (0.0,    FIELD_H),
-]
+_ZOOM_SZ  = 140
+_ZOOM_FAC = 5
+_HIT_R    = 24   # click tolerance on diagram (pixels)
 
-
-def pick_landmarks(frame: np.ndarray) -> tuple[list[list[int]], list[list[float]]]:
-    """
-    첫 프레임에서 경기장 4 코너를 클릭 → 호모그래피 대응점 반환.
-    4 코너가 항상 보이는 영상을 전제로 하며, 필드 전체가 변환 정의역이 된다.
-    반환: (픽셀 src_points 4개, 미터 dst_points 4개)
-    """
-    print("\n=== 경기장 4 코너 선택 ===")
-    print("  좌상 → 우상 → 우하 → 좌하 순서로 클릭하세요.")
-    print("  • Backspace: 마지막 점 취소\n")
-
-    h, w = frame.shape[:2]
-    scale = min(1280 / w, 720 / h, 1.0)
-    base = cv2.resize(frame, (int(w * scale), int(h * scale)))
-
-    pts_display = _click_corners(base)
-
-    src_points = [[int(x / scale), int(y / scale)] for x, y in pts_display]
-    dst_points = [list(c) for c in _CORNER_COORDS]
-    return src_points, dst_points
+_LM_LIST = list(LANDMARKS.items())   # [(name, (mx, my)), ...]
 
 
-def _click_corners(base: np.ndarray) -> list[list[int]]:
-    pts: list[list[int]] = []
-    canvas = [_rebuild(base, pts)]
+# ── coordinate helpers ─────────────────────────────────────────────────
 
-    def on_mouse(event, x, y, _flags, _param):
-        if event == cv2.EVENT_LBUTTONDOWN and len(pts) < 4:
-            pts.append([x, y])
-            canvas[0] = _rebuild(base, pts)
-        if event in (cv2.EVENT_LBUTTONDOWN, cv2.EVENT_MOUSEMOVE):
-            vis = canvas[0].copy()
-            _draw_zoom_inset(vis, x, y)
-            cv2.imshow(WINDOW, vis)
-
-    cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
-    cv2.setMouseCallback(WINDOW, on_mouse)
-    cv2.imshow(WINDOW, canvas[0])
-
-    while len(pts) < 4:
-        key = cv2.waitKey(30) & 0xFF
-        if key == ord("q"):
-            raise RuntimeError("사용자가 취소했습니다.")
-        if key in (8, 127) and pts:  # Backspace / Delete
-            pts.pop()
-            canvas[0] = _rebuild(base, pts)
-            cv2.imshow(WINDOW, canvas[0])
-
-    cv2.destroyWindow(WINDOW)
-    return pts
+def _m2d(mx: float, my: float) -> tuple[int, int]:
+    """Field meters → diagram-canvas pixel."""
+    return _PAD + int(mx * _SCALE), _PAD + int(my * _SCALE)
 
 
-def _rebuild(base: np.ndarray, pts: list[list[int]]) -> np.ndarray:
-    c = base.copy()
-    for i, (px, py) in enumerate(pts):
-        cv2.circle(c, (px, py), 6, (0, 255, 255), -1)
-        cv2.putText(c, _CORNER_NAMES[i], (px + 8, py - 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-    _draw_guide(c, len(pts))
+def _nearest_lm(dx: int, dy: int, used: set) -> tuple | None:
+    """Return (name, (mx, my)) of nearest unused landmark within _HIT_R px."""
+    best_d, best = _HIT_R + 1, None
+    for name, (mx, my) in _LM_LIST:
+        if name in used:
+            continue
+        px, py = _m2d(mx, my)
+        d = ((dx - px) ** 2 + (dy - py) ** 2) ** 0.5
+        if d < best_d:
+            best_d, best = d, (name, (mx, my))
+    return best
+
+
+# ── diagram renderer ───────────────────────────────────────────────────
+
+def _make_diagram(confirmed: set, hover: str | None = None) -> np.ndarray:
+    c = np.full((_DIAG_H, _DIAG_W, 3), (20, 80, 20), dtype=np.uint8)
+    x0, y0 = _PAD, _PAD
+    x1, y1 = _DIAG_W - _PAD - 1, _DIAG_H - _PAD - 1
+
+    # Field area
+    cv2.rectangle(c, (x0, y0), (x1, y1), (34, 139, 34), -1)
+    cv2.rectangle(c, (x0, y0), (x1, y1), (255, 255, 255), 2)
+
+    # Halfway line + center circle + center spot
+    hx = _PAD + int(FIELD_W / 2 * _SCALE)
+    cv2.line(c, (hx, y0), (hx, y1), (255, 255, 255), 1)
+    cx, cy = _m2d(FIELD_W / 2, FIELD_H / 2)
+    cv2.circle(c, (cx, cy), int(9.15 * _SCALE), (255, 255, 255), 1)
+    cv2.circle(c, (cx, cy), 3, (255, 255, 255), -1)
+
+    # Penalty boxes
+    for bx0, bx1 in ((0.0, 16.5), (88.5, 105.0)):
+        a, b = _m2d(bx0, 13.84)
+        d, e = _m2d(bx1, 54.16)
+        cv2.rectangle(c, (a, b), (d, e), (255, 255, 255), 1)
+    # Goal areas
+    for gx0, gx1 in ((0.0, 5.5), (99.5, 105.0)):
+        a, b = _m2d(gx0, 24.84)
+        d, e = _m2d(gx1, 43.16)
+        cv2.rectangle(c, (a, b), (d, e), (255, 255, 255), 1)
+    # Penalty spots
+    for mx, my in ((11.0, 34.0), (94.0, 34.0)):
+        cv2.circle(c, _m2d(mx, my), 3, (255, 255, 255), -1)
+
+    # Landmarks
+    for i, (name, (mx, my)) in enumerate(_LM_LIST):
+        px, py = _m2d(mx, my)
+        if name in confirmed:
+            col, r = (50, 255, 80), 6    # confirmed → green
+        elif name == hover:
+            col, r = (50, 255, 255), 8  # hovered → cyan, larger
+        else:
+            col, r = (80, 180, 255), 5  # available → blue
+        cv2.circle(c, (px, py), r, col, -1)
+        cv2.circle(c, (px, py), r, (0, 0, 0), 1)
+        cv2.putText(c, str(i + 1), (px + 5, py + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.30, (255, 255, 255), 1)
+
+    # Header strip
+    cv2.rectangle(c, (0, 0), (_DIAG_W, 18), (10, 50, 10), -1)
+    cv2.putText(c, " <- 대응 랜드마크 클릭", (4, 13),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 220, 180), 1)
     return c
 
 
-def _draw_guide(frame: np.ndarray, done: int):
-    bar_w = min(560, frame.shape[1])
-    overlay = frame[:40, :bar_w].copy()
-    cv2.rectangle(frame, (0, 0), (bar_w, 40), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.35, frame[:40, :bar_w], 0.65, 0, frame[:40, :bar_w])
+# ── zoom inset (video panel) ───────────────────────────────────────────
 
-    if done < 4:
-        text = f"클릭 ({done}/4): {_CORNER_NAMES[done]}  |  Backspace: 취소"
-    else:
-        text = "4개 완료 — 닫는 중..."
-
-    cv2.putText(frame, text, (8, 28),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-
-def _draw_zoom_inset(frame: np.ndarray, cx: int, cy: int):
-    fh, fw = frame.shape[:2]
-    half = _ZOOM_SIZE // (2 * _ZOOM_FACTOR)
-
+def _draw_zoom(panel: np.ndarray, cx: int, cy: int):
+    ph, pw = panel.shape[:2]
+    half = _ZOOM_SZ // (2 * _ZOOM_FAC)
     x1, y1 = max(0, cx - half), max(0, cy - half)
-    x2, y2 = min(fw, cx + half), min(fh, cy + half)
+    x2, y2 = min(pw, cx + half), min(ph, cy + half)
     if x2 <= x1 or y2 <= y1:
         return
-
-    zoomed = cv2.resize(frame[y1:y2, x1:x2], (_ZOOM_SIZE, _ZOOM_SIZE),
+    zoomed = cv2.resize(panel[y1:y2, x1:x2], (_ZOOM_SZ, _ZOOM_SZ),
                         interpolation=cv2.INTER_LINEAR)
-    mid = _ZOOM_SIZE // 2
-    cv2.line(zoomed, (mid, 0), (mid, _ZOOM_SIZE - 1), (0, 255, 0), 1)
-    cv2.line(zoomed, (0, mid), (_ZOOM_SIZE - 1, mid), (0, 255, 0), 1)
-    cv2.rectangle(zoomed, (0, 0), (_ZOOM_SIZE - 1, _ZOOM_SIZE - 1), (0, 255, 0), 2)
+    mid = _ZOOM_SZ // 2
+    cv2.line(zoomed, (mid, 0), (mid, _ZOOM_SZ - 1), (0, 255, 0), 1)
+    cv2.line(zoomed, (0, mid), (_ZOOM_SZ - 1, mid), (0, 255, 0), 1)
+    cv2.rectangle(zoomed, (0, 0), (_ZOOM_SZ - 1, _ZOOM_SZ - 1), (0, 255, 0), 2)
+    ox = pw - _ZOOM_SZ - 6
+    oy = 22
+    if oy + _ZOOM_SZ <= ph and ox >= 0:
+        panel[oy:oy + _ZOOM_SZ, ox:ox + _ZOOM_SZ] = zoomed
 
-    px = fw - _ZOOM_SIZE - 6
-    py = 46
-    if py + _ZOOM_SIZE <= fh and px >= 0:
-        frame[py:py + _ZOOM_SIZE, px:px + _ZOOM_SIZE] = zoomed
+
+# ── entry point ────────────────────────────────────────────────────────
+
+def pick_landmarks(frame: np.ndarray) -> tuple[list[list[int]], list[list[float]]]:
+    """
+    Two-panel UI: pair visible field markings with known FIFA landmarks.
+    Works with tactical-cam frames where 4 corners are not all visible.
+    Camera panning/zooming is handled by CameraTracker in the pipeline.
+
+    Returns:
+        src_points: pixel coords in the original (unscaled) frame
+        dst_points: corresponding field coords in meters
+    """
+    print("\n=== 필드 랜드마크 선택 ===")
+    print("  1단계: 왼쪽 영상에서 필드 라인 교차점 클릭")
+    print("  2단계: 오른쪽 다이어그램에서 같은 지점 클릭")
+    print("  4쌍 이상 후 Enter / Q 로 완료  |  Backspace: 취소\n")
+    print("  랜드마크 목록:")
+    for i, (name, (mx, my)) in enumerate(_LM_LIST):
+        print(f"    {i + 1:2d}. {name} ({mx:.1f}m, {my:.1f}m)")
+    print()
+
+    h, w = frame.shape[:2]
+    vs = min(820 / w, 500 / h, 1.0)
+    vw, vh = int(w * vs), int(h * vs)
+    vid_base = cv2.resize(frame, (vw, vh))
+
+    STATUS_H = 34
+    win_w = vw + _DIAG_W
+    win_h = max(vh, _DIAG_H) + STATUS_H
+
+    # (display_pixel, landmark_name, meters)
+    pairs: list[tuple[list[int], str, list[float]]] = []
+    confirmed: set[str] = set()
+    st = {"phase": 0, "pend": None}   # phase 0 = want src, 1 = want dst
+    hover: list[str | None] = [None]
+
+    def _rebuild() -> np.ndarray:
+        c = np.zeros((win_h, win_w, 3), dtype=np.uint8)
+
+        # Video panel
+        vid = vid_base.copy()
+        for i, (sp, name, _) in enumerate(pairs):
+            cv2.circle(vid, tuple(sp), 6, (50, 255, 50), -1)
+            cv2.circle(vid, tuple(sp), 6, (0, 0, 0), 1)
+            cv2.putText(vid, str(i + 1), (sp[0] + 7, sp[1] - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (50, 255, 50), 2)
+        if st["pend"] is not None:
+            p = st["pend"]
+            cv2.circle(vid, tuple(p), 7, (0, 200, 255), -1)
+            cv2.circle(vid, tuple(p), 7, (0, 0, 0), 1)
+            cv2.putText(vid, "?", (p[0] + 8, p[1] - 6),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
+        c[:vh, :vw] = vid
+
+        # Diagram panel
+        c[:_DIAG_H, vw:vw + _DIAG_W] = _make_diagram(confirmed, hover[0])
+
+        # Divider
+        cv2.line(c, (vw, 0), (vw, win_h), (80, 80, 80), 1)
+
+        # Status bar
+        sb = c[win_h - STATUS_H:]
+        sb[:] = (20, 20, 20)
+        if st["phase"] == 0:
+            msg = (f"[{len(pairs)}쌍]  1단계: 영상에서 필드 라인 교차점 클릭"
+                   f"  |  Enter({len(pairs)}/4+): 확정  Backspace: 취소")
+        else:
+            msg = (f"[{len(pairs)}쌍]  2단계: 다이어그램에서 래드마크 클릭"
+                   f"  |  Backspace: 취소")
+        cv2.putText(sb, msg, (8, 22),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, (220, 220, 220), 1)
+        return c
+
+    img = [_rebuild()]
+
+    def on_mouse(event, x, y, flags, _):
+        in_vid  = x < vw and y < vh
+        in_diag = x >= vw and y < _DIAG_H
+        dx, dy  = x - vw, y
+
+        if event == cv2.EVENT_MOUSEMOVE:
+            vis = img[0].copy()
+            if in_vid:
+                _draw_zoom(vis[:vh, :vw], x, y)
+            redraw = False
+            if in_diag:
+                match = _nearest_lm(dx, dy, confirmed)
+                new_h = match[0] if match else None
+            else:
+                new_h = None
+            if new_h != hover[0]:
+                hover[0] = new_h
+                img[0] = _rebuild()
+                vis = img[0].copy()
+                if in_vid:
+                    _draw_zoom(vis[:vh, :vw], x, y)
+            cv2.imshow(WINDOW, vis)
+            return
+
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+
+        if in_vid:
+            # (Re-)set pending source, move to phase 1
+            st["pend"] = [x, y]
+            st["phase"] = 1
+            img[0] = _rebuild()
+            cv2.imshow(WINDOW, img[0])
+
+        elif in_diag and st["phase"] == 1:
+            match = _nearest_lm(dx, dy, confirmed)
+            if match is not None:
+                name, (mx, my) = match
+                pairs.append((st["pend"].copy(), name, [mx, my]))
+                confirmed.add(name)
+                st["pend"] = None
+                st["phase"] = 0
+                print(f"  [{len(pairs)}] {name} → ({mx:.1f}m, {my:.1f}m)")
+                img[0] = _rebuild()
+                cv2.imshow(WINDOW, img[0])
+
+    cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
+    cv2.setMouseCallback(WINDOW, on_mouse)
+    cv2.imshow(WINDOW, img[0])
+
+    while True:
+        key = cv2.waitKey(30) & 0xFF
+        if key in (13, ord('q'), 27) and len(pairs) >= 4:
+            break
+        if key in (8, 127):  # Backspace / Delete
+            if st["phase"] == 1:
+                st["pend"] = None
+                st["phase"] = 0
+            elif pairs:
+                _, removed, _ = pairs.pop()
+                confirmed.discard(removed)
+                print(f"  취소 → {len(pairs)}쌍 남음")
+            img[0] = _rebuild()
+            cv2.imshow(WINDOW, img[0])
+
+    cv2.destroyWindow(WINDOW)
+
+    src_points = [[int(sp[0] / vs), int(sp[1] / vs)] for sp, _, _ in pairs]
+    dst_points = [d for _, _, d in pairs]
+    return src_points, dst_points

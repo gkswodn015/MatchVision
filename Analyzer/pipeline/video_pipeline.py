@@ -4,6 +4,7 @@ import numpy as np
 from detector.yolo_detector import YoloDetector
 from tracker.bytetrack import ByteTracker
 from topview.coordinate_mapper import CoordinateMapper, CANVAS_W, CANVAS_H
+from topview.calibration_set import CalibrationSet
 from topview.field_landmarks import FIELD_W, FIELD_H
 from stats.speed_calculator import SpeedCalculator
 from stats.possession import PossessionTracker
@@ -12,13 +13,14 @@ from visualizer.path_drawer import PathDrawer
 
 
 class VideoPipeline:
-    def __init__(self, video_path: str, coord_mapper: CoordinateMapper):
+    def __init__(self, video_path: str, calib_set: CalibrationSet):
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
             raise FileNotFoundError(f"영상을 열 수 없습니다: {video_path}")
 
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
-        self.coord_mapper = coord_mapper
+        self.fps       = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self.calib_set = calib_set
+        self.coord_mapper = CoordinateMapper(calib_set.get_mapper(0))
 
         self.detector   = YoloDetector()
         self.tracker    = ByteTracker()
@@ -33,10 +35,15 @@ class VideoPipeline:
     def run(self):
         print("분석 시작. 'q' 키로 종료.\n")
 
+        frame_n = 0
         while True:
             ret, frame = self.cap.read()
             if not ret:
                 break
+            frame_n += 1
+
+            # 현재 프레임에 가장 가까운 캘리브레이션으로 교체
+            self.coord_mapper.mapper = self.calib_set.get_mapper(frame_n)
 
             # --- 탐지 & 추적 ---
             detections = self.detector.detect(frame)
@@ -77,15 +84,11 @@ class VideoPipeline:
 
     def _make_topview_canvas(self) -> np.ndarray:
         canvas = np.full((CANVAS_H, CANVAS_W, 3), (34, 139, 34), dtype=np.uint8)
-        # 외곽선
         cv2.rectangle(canvas, (0, 0), (CANVAS_W - 1, CANVAS_H - 1), (255, 255, 255), 2)
-        # 하프라인
         half_x = int(52.5 * CANVAS_W / FIELD_W)
         cv2.line(canvas, (half_x, 0), (half_x, CANVAS_H), (255, 255, 255), 1)
-        # 센터서클 (반지름 9.15m)
         r = int(9.15 * CANVAS_W / FIELD_W)
         cv2.circle(canvas, (half_x, CANVAS_H // 2), r, (255, 255, 255), 1)
-        # 페널티박스
         self._draw_box(canvas,  0.0, 13.84, 16.5, 54.16)
         self._draw_box(canvas, 88.5, 13.84, 105.0, 54.16)
         return canvas
