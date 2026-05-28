@@ -1,151 +1,139 @@
-import math
 import cv2
 import numpy as np
 
-THUMB_W  = 260
-THUMB_H  = 146
-PAD      = 8
-LABEL_H  = 22
-CELL_W   = THUMB_W + PAD
-CELL_H   = THUMB_H + LABEL_H + PAD
-COLS     = 4
-ROWS_VIS = 3
-BOTTOM_H = 44
-WIN_W    = COLS * CELL_W + PAD
-WIN_H    = ROWS_VIS * CELL_H + PAD + BOTTOM_H
-
-_WIN  = "Keyframe Selector"   # ASCII name — Korean title breaks setMouseCallback on Windows
-_BG   = (30, 30, 30)
-_SEL  = (0, 200, 80)
-_UNSEL = (60, 60, 60)
+WIN = "Calibration Frame Picker"
+TRACKBAR = "frame"
+MAX_W = 1280
+MAX_H = 720
+BAR_H = 86
 
 
-def extract_keyframes(
-    video_path: str,
-    interval_sec: float = 5.0,
-    max_frames: int = 50,
-) -> list[tuple[int, np.ndarray]]:
-    """Extract frames at regular intervals. Returns [(frame_idx, frame), ...]."""
-    cap   = cv2.VideoCapture(video_path)
-    fps   = cap.get(cv2.CAP_PROP_FPS) or 30.0
+def select_keyframes_from_video(video_path: str) -> list[tuple[int, np.ndarray]]:
+    """
+    Slider UI for selecting calibration frames.
+
+    Controls:
+      - Trackbar: move through the video
+      - A/D: previous/next frame
+      - W/S: jump backward/forward 1 second
+      - Space/C: capture current frame
+      - Backspace/Delete: remove latest captured frame
+      - Enter: confirm selected frames
+      - ESC/Q: cancel
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Cannot open video: {video_path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    step = max(1, int(fps * interval_sec))
-    if total // max(step, 1) > max_frames:
-        step = max(1, total // max_frames)
-
-    out: list[tuple[int, np.ndarray]] = []
-    idx = 0
-    while idx < total:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cap.read()
-        if ret:
-            out.append((idx, frame.copy()))
-        idx += step
-
-    cap.release()
-    return out
-
-
-def select_keyframes(
-    keyframes: list[tuple[int, np.ndarray]],
-    fps: float = 30.0,
-) -> list[tuple[int, np.ndarray]]:
-    """
-    Grid UI for selecting frames to calibrate on.
-    Controls: left-click to toggle, W/S or mouse wheel to scroll, Enter to confirm.
-    Returns selected subset in frame-index order.
-    """
-    if not keyframes:
+    if total <= 0:
+        cap.release()
         return []
 
-    thumbs: list[tuple[int, np.ndarray, str]] = []
-    for frame_idx, frame in keyframes:
-        th  = cv2.resize(frame, (THUMB_W, THUMB_H))
-        m, s = divmod(int(frame_idx / fps), 60)
-        thumbs.append((frame_idx, th, f"{m:02d}:{s:02d}  f{frame_idx}"))
+    selected: dict[int, np.ndarray] = {}
+    current = [0]
+    last_drawn = [-1]
 
-    total_rows = math.ceil(len(thumbs) / COLS)
-    max_scroll = max(0, total_rows - ROWS_VIS)
-    scroll_row = 0
-    selected: set[int] = set()
-    redraw = [True]
+    cv2.namedWindow(WIN, cv2.WINDOW_AUTOSIZE)
 
-    def on_mouse(event, x, y, flags, _):
-        nonlocal scroll_row
-        if event == cv2.EVENT_LBUTTONDOWN:
-            gx, gy = x - PAD, y - PAD
-            if gx < 0 or gy < 0 or gy >= ROWS_VIS * CELL_H:
-                return
-            col = gx // CELL_W
-            rv  = gy  // CELL_H
-            if col >= COLS:
-                return
-            i = (scroll_row + rv) * COLS + col
-            if 0 <= i < len(thumbs):
-                selected.discard(i) if i in selected else selected.add(i)
-                redraw[0] = True
-        elif event == cv2.EVENT_MOUSEWHEEL:
-            # flags > 0 = wheel up → show earlier rows
-            delta = -1 if flags > 0 else 1
-            scroll_row = max(0, min(max_scroll, scroll_row + delta))
-            redraw[0] = True
+    def on_trackbar(value):
+        current[0] = max(0, min(total - 1, value))
 
-    cv2.namedWindow(_WIN, cv2.WINDOW_AUTOSIZE)
-    cv2.setMouseCallback(_WIN, on_mouse)
+    cv2.createTrackbar(TRACKBAR, WIN, 0, total - 1, on_trackbar)
 
     while True:
-        if redraw[0]:
-            cv2.imshow(_WIN, _render(thumbs, selected, scroll_row))
-            redraw[0] = False
+        frame_idx = current[0]
+        if frame_idx != last_drawn[0]:
+            frame = _read_frame(cap, frame_idx)
+            if frame is not None:
+                cv2.imshow(WIN, _render(frame, frame_idx, fps, total, selected))
+                last_drawn[0] = frame_idx
 
         key = cv2.waitKey(30) & 0xFF
-        if key in (ord('w'), ord('W')):
-            scroll_row = max(0, scroll_row - 1)
-            redraw[0] = True
-        elif key in (ord('s'), ord('S')):
-            scroll_row = min(max_scroll, scroll_row + 1)
-            redraw[0] = True
-        elif key in (13, 10) and selected:   # Enter — need at least one frame
-            break
-        elif key == 27:                       # ESC → fall back to first frame
-            selected.add(0)
-            break
+        if key == 255:
+            continue
 
-    cv2.destroyWindow(_WIN)
-    return [keyframes[i] for i in sorted(selected)]
+        if key in (27, ord("q"), ord("Q")):
+            selected.clear()
+            break
+        if key in (13, 10):
+            if selected:
+                break
+            continue
+        if key in (ord(" "), ord("c"), ord("C")):
+            frame = _read_frame(cap, frame_idx)
+            if frame is not None:
+                selected[frame_idx] = frame.copy()
+                last_drawn[0] = -1
+            continue
+        if key in (8, 127):
+            if selected:
+                selected.pop(sorted(selected)[-1], None)
+                last_drawn[0] = -1
+            continue
+
+        next_idx = frame_idx
+        if key in (ord("a"), ord("A")):
+            next_idx = frame_idx - 1
+        elif key in (ord("d"), ord("D")):
+            next_idx = frame_idx + 1
+        elif key in (ord("w"), ord("W")):
+            next_idx = frame_idx - int(fps)
+        elif key in (ord("s"), ord("S")):
+            next_idx = frame_idx + int(fps)
+
+        next_idx = max(0, min(total - 1, next_idx))
+        if next_idx != frame_idx:
+            current[0] = next_idx
+            cv2.setTrackbarPos(TRACKBAR, WIN, next_idx)
+
+    cap.release()
+    cv2.destroyWindow(WIN)
+    return [(idx, selected[idx]) for idx in sorted(selected)]
+
+
+def _read_frame(cap: cv2.VideoCapture, frame_idx: int):
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    ret, frame = cap.read()
+    return frame if ret else None
 
 
 def _render(
-    thumbs: list[tuple[int, np.ndarray, str]],
-    selected: set[int],
-    scroll_row: int,
+    frame,
+    frame_idx: int,
+    fps: float,
+    total: int,
+    selected: dict[int, np.ndarray],
 ) -> np.ndarray:
-    canvas = np.full((WIN_H, WIN_W, 3), _BG, dtype=np.uint8)
+    h, w = frame.shape[:2]
+    scale = min(MAX_W / w, MAX_H / h, 1.0)
+    view = cv2.resize(frame, (int(w * scale), int(h * scale)))
 
-    for rv in range(ROWS_VIS):
-        row = scroll_row + rv
-        for col in range(COLS):
-            i = row * COLS + col
-            if i >= len(thumbs):
-                break
-            _, th, lbl = thumbs[i]
-            cx = PAD + col * CELL_W
-            cy = PAD + rv  * CELL_H
+    canvas = np.full((view.shape[0] + BAR_H, view.shape[1], 3), (24, 24, 24), dtype=np.uint8)
+    canvas[:view.shape[0], :view.shape[1]] = view
 
-            canvas[cy:cy + THUMB_H, cx:cx + THUMB_W] = th
+    y0 = view.shape[0]
+    seconds = frame_idx / fps
+    m, s = divmod(int(seconds), 60)
+    count = len(selected)
 
-            bc, bt = (_SEL, 3) if i in selected else (_UNSEL, 1)
-            cv2.rectangle(canvas, (cx - 1, cy - 1),
-                          (cx + THUMB_W, cy + THUMB_H), bc, bt)
-            cv2.putText(canvas, lbl, (cx, cy + THUMB_H + 16),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1)
+    cv2.rectangle(canvas, (0, y0), (canvas.shape[1], canvas.shape[0]), (18, 18, 18), -1)
+    cv2.putText(canvas, f"Frame {frame_idx}/{total - 1}  Time {m:02d}:{s:02d}  Selected {count}",
+                (10, y0 + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (230, 230, 230), 2)
+    cv2.putText(canvas, "Slider: seek | Space/C: capture | Backspace: undo | Enter: confirm | A/D: frame | W/S: 1 sec",
+                (10, y0 + 52), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (170, 220, 170), 1)
 
-    bar_y = WIN_H - BOTTOM_H
-    cv2.rectangle(canvas, (0, bar_y), (WIN_W, WIN_H), (20, 20, 20), -1)
-    n   = len(selected)
-    msg = f"Selected: {n}  |  Click: toggle  |  W/S / Wheel: scroll  |  Enter: confirm"
-    cv2.putText(canvas, msg, (PAD, bar_y + 28),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.52,
-                (0, 220, 100) if n else (100, 100, 255), 1)
+    _draw_selected_ticks(canvas, y0 + 68, total, selected)
     return canvas
+
+
+def _draw_selected_ticks(canvas, y: int, total: int, selected: dict[int, np.ndarray]):
+    x1, x2 = 10, canvas.shape[1] - 10
+    cv2.line(canvas, (x1, y), (x2, y), (80, 80, 80), 2)
+    if total <= 1:
+        return
+
+    for idx in selected:
+        x = int(x1 + (x2 - x1) * idx / (total - 1))
+        cv2.line(canvas, (x, y - 8), (x, y + 8), (0, 220, 80), 2)
