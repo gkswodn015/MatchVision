@@ -13,7 +13,7 @@ xG
 
 예시 url : https://www.fotmob.com/en-GB/matches/brighton-hove-albion-vs-manchester-united/3goccs#4813745
 
-☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆
+☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆  
 이거 하기 전에 터미널에서 : 
 pip install -r requirements.txt
 해야함
