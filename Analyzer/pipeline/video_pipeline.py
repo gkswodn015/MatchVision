@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 
 from detector.yolo_detector import YoloDetector
+from detector.classifier import TeamClassifier
 from tracker.bytetrack import ByteTracker
 from topview.coordinate_mapper import CoordinateMapper, CANVAS_W, CANVAS_H
 from topview.calibration_set import CalibrationSet
@@ -13,7 +14,12 @@ from visualizer.path_drawer import PathDrawer
 
 
 class VideoPipeline:
-    def __init__(self, video_path: str, calib_set: CalibrationSet):
+    def __init__(
+        self,
+        video_path: str,
+        calib_set: CalibrationSet,
+        classifier: TeamClassifier | None = None,
+    ):
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
             raise FileNotFoundError(f"영상을 열 수 없습니다: {video_path}")
@@ -23,6 +29,7 @@ class VideoPipeline:
         self.coord_mapper = CoordinateMapper(calib_set.get_mapper(0))
 
         self.detector   = YoloDetector()
+        self.classifier = classifier or TeamClassifier()
         self.tracker    = ByteTracker()
         self.speed_calc = SpeedCalculator(fps=self.fps)
         self.possession = PossessionTracker()
@@ -46,7 +53,9 @@ class VideoPipeline:
             self.coord_mapper.mapper = self.calib_set.get_mapper(frame_n)
 
             # --- 탐지 & 추적 ---
-            detections = self.detector.detect(frame)
+            raw_detections = self.detector.detect(frame)
+            detections = self._filter_inside_field(raw_detections)
+            detections = self.classifier.classify(frame, detections)
             tracks     = self.tracker.update(detections)
 
             # --- 좌표 변환 ---
@@ -99,6 +108,19 @@ class VideoPipeline:
         x2 = int(mx2 * CANVAS_W / FIELD_W)
         y2 = int(my2 * CANVAS_H / FIELD_H)
         cv2.rectangle(canvas, (x1, y1), (x2, y2), (255, 255, 255), 1)
+
+    def _filter_inside_field(self, detections: list[dict]) -> list[dict]:
+        filtered = []
+        margin = 1.0
+        for det in detections:
+            try:
+                mx, my = self.coord_mapper.to_meters(det["bbox"])
+            except cv2.error:
+                continue
+
+            if -margin <= mx <= FIELD_W + margin and -margin <= my <= FIELD_H + margin:
+                filtered.append(det)
+        return filtered
 
     def _cleanup(self):
         self.cap.release()

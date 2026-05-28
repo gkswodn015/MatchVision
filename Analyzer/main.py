@@ -6,6 +6,10 @@ from topview.keyframe_selector import extract_keyframes, select_keyframes
 from topview.landmark_picker import pick_landmarks
 from topview.homography import HomographyMapper
 from topview.calibration_set import CalibrationSet
+from topview.coordinate_mapper import CoordinateMapper
+from topview.field_landmarks import FIELD_W, FIELD_H
+from detector.yolo_detector import YoloDetector
+from detector.classifier import pick_role_samples
 from pipeline.video_pipeline import VideoPipeline
 
 DATA_DIR = "data"
@@ -80,8 +84,34 @@ def main():
         calibrations.append((frame_idx, HomographyMapper(src_pts, dst_pts)))
 
     calib_set = CalibrationSet(calibrations)
-    pipeline  = VideoPipeline(video_path, calib_set)
+    sample_frame_idx, sample_frame = selected[0]
+    sample_mapper = CoordinateMapper(calib_set.get_mapper(sample_frame_idx))
+
+    print("\nDetecting players for role samples...")
+    detector = YoloDetector()
+    raw_sample_detections = detector.detect(sample_frame)
+    sample_detections = _filter_inside_field(raw_sample_detections, sample_mapper)
+    if sum(1 for det in sample_detections if det["class"] == "person") < 3:
+        sample_detections = raw_sample_detections
+
+    print("Click one OUR TEAM player, one OPPONENT player, and one REFEREE.")
+    classifier = pick_role_samples(sample_frame, sample_detections)
+
+    pipeline  = VideoPipeline(video_path, calib_set, classifier=classifier)
     pipeline.run()
+
+
+def _filter_inside_field(detections: list[dict], mapper: CoordinateMapper) -> list[dict]:
+    filtered = []
+    margin = 1.0
+    for det in detections:
+        try:
+            mx, my = mapper.to_meters(det["bbox"])
+        except cv2.error:
+            continue
+        if -margin <= mx <= FIELD_W + margin and -margin <= my <= FIELD_H + margin:
+            filtered.append(det)
+    return filtered
 
 
 if __name__ == "__main__":

@@ -110,6 +110,10 @@ class ByteTracker:
             new_bbox = detections[didx]["bbox"]
             corrected = self._tracks[tid]["kf"].correct(new_bbox)
             self._tracks[tid]["bbox"] = corrected
+            self._tracks[tid]["class"] = detections[didx]["class"]
+            self._tracks[tid]["role"] = detections[didx].get(
+                "role", detections[didx]["class"]
+            )
             self._tracks[tid]["lost"] = 0
 
         # 4) 미매칭 트랙: lost 카운터 증가
@@ -160,6 +164,7 @@ class ByteTracker:
         self._tracks[self._next_id] = {
             "bbox":  det["bbox"],
             "class": det["class"],
+            "role":  det.get("role", det["class"]),
             "lost":  0,
             "kf":    _KalmanTrack(det["bbox"]),
         }
@@ -178,7 +183,12 @@ class ByteTracker:
 
     def _active_tracks(self) -> list[dict]:
         return [
-            {"id": tid, "bbox": t["bbox"], "class": t["class"]}
+            {
+                "id": tid,
+                "bbox": t["bbox"],
+                "class": t["class"],
+                "role": t.get("role", t["class"]),
+            }
             for tid, t in self._tracks.items()
             if t["lost"] == 0
         ]
