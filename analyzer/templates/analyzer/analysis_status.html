@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}분석 상태 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>분석 상태 확인</h2>
+    <p>요청한 경기 영상의 분석 진행 상태를 확인합니다.</p>
+</div>
+
+<div class="card">
+    <h3>{{ match.title }}</h3>
+
+    <p><strong>현재 상태:</strong> {{ match.get_status_display }}</p>
+    <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
+    <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+    {% if match.status == 'uploaded' %}
+        <p>아직 분석 요청이 되지 않은 영상입니다.</p>
+        <a class="button" href="{% url 'request_analysis' match.id %}">분석 요청하기</a>
+
+    {% elif match.status == 'analyzing' %}
+        <p>
+            분석 요청이 접수된 영상입니다.
+            현재 단계에서는 실제 YOLO/OpenCV 결과 대신 더미 분석 결과를 생성합니다.
+        </p>
+
+        <form method="post" action="{% url 'generate_report' match.id %}">
+            {% csrf_token %}
+            <button class="button" type="submit">더미 분석 리포트 생성</button>
+        </form>
+
+    {% elif match.status == 'completed' %}
+        <p>분석이 완료된 영상입니다.</p>
+        <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <a class="button" href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>
+    <a class="button" href="{% url 'match_manage' %}">경기 관리로 돌아가기</a>
+</div>
+{% endblock %}

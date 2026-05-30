@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block title %}영상 분석 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>영상 분석 페이지</h2>
+    <p>
+        업로드된 영상을 선택하고 홈팀/원정팀을 지정한 뒤 분석을 요청합니다.
+        현재 화면은 실제 YOLO/OpenCV 알고리즘 연결 전 단계이므로 더미 오버레이를 표시합니다.
+    </p>
+</div>
+
+<div class="card">
+    <h3>{{ match.title }} - {{ match.video_name }}</h3>
+
+    <p><strong>분석 상태:</strong> {{ match.get_status_display }}</p>
+    <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
+    <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+    <hr>
+
+    <h3>탐지 상태 오버레이</h3>
+    <p><strong>FRAME:</strong> 0001 / 1200</p>
+    <p><strong>PLAYERS:</strong> DETECTING</p>
+    <p><strong>BALL:</strong> DETECTING</p>
+
+    <div style="position: relative; width: 700px; max-width: 100%; background-color: #222;">
+        <video width="700" controls>
+            <source src="{{ match.video.url }}">
+            브라우저에서 영상을 재생할 수 없습니다.
+        </video>
+
+        <div style="position:absolute; top:20px; left:20px; background:rgba(0,0,0,0.75); color:white; padding:10px; border-radius:8px;">
+            FRAME / PLAYERS / BALL DETECTING
+        </div>
+
+        <div style="position:absolute; top:120px; left:90px; border:3px solid cyan; color:cyan; padding:18px; font-weight:bold;">
+            player_1<br>
+            speed 8.4km/h
+        </div>
+
+        <div style="position:absolute; top:190px; left:340px; border:3px solid hotpink; color:hotpink; padding:18px; font-weight:bold;">
+            player_2<br>
+            speed 7.9km/h
+        </div>
+
+        <div style="position:absolute; bottom:50px; right:120px; border:3px solid orange; color:orange; padding:10px; font-weight:bold;">
+            BALL
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>팀 선택 및 분석 요청</h3>
+
+    {% if teams %}
+        <form method="post" action="{% url 'request_analysis' match.id %}">
+            {% csrf_token %}
+
+            <p>
+                <label>홈팀 선택</label><br>
+                <select name="home_team">
+                    <option value="">홈팀 선택 안 함</option>
+                    {% for team in teams %}
+                        <option value="{{ team.id }}"
+                            {% if match.home_team and match.home_team.id == team.id %}selected{% endif %}
+                        >
+                            {{ team.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </p>
+
+            <p>
+                <label>원정팀 선택</label><br>
+                <select name="away_team">
+                    <option value="">원정팀 선택 안 함</option>
+                    {% for team in teams %}
+                        <option value="{{ team.id }}"
+                            {% if match.away_team and match.away_team.id == team.id %}selected{% endif %}
+                        >
+                            {{ team.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </p>
+
+            <button class="button" type="submit">분석 요청 및 리포트 생성</button>
+        </form>
+    {% else %}
+        <p>등록된 팀이 없습니다. 먼저 팀/선수 관리 페이지에서 팀을 등록해 주세요.</p>
+        <a class="button" href="{% url 'team_player_manage' %}">팀/선수 관리로 이동</a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>분석 데이터 저장 안내</h3>
+    <p>
+        실제 YOLO/OpenCV 분석 알고리즘이 연결되면 선수 바운딩 박스, 속도,
+        공 위치, 이동 경로 데이터가 이 화면에 표시되고 저장됩니다.
+    </p>
+    <p class="disabled">
+        현재는 웹페이지 기능 구현 단계이므로 더미 탐지 결과를 표시합니다.
+    </p>
+</div>
+
+<div class="card">
+    <a class="button" href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>
+    <a class="button" href="{% url 'match_detail' match.id %}">경기 상세로 돌아가기</a>
+    <a class="button" href="{% url 'match_manage' %}">경기 관리로 돌아가기</a>
+</div>
+{% endblock %}

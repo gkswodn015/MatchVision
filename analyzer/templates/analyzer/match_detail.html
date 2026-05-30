@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}경기 상세 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>경기 상세 페이지</h2>
+    <p>선택한 경기 영상의 상세 정보를 확인합니다.</p>
+</div>
+
+<div class="card">
+    <h3>{{ match.title }}</h3>
+
+    <p><strong>영상 이름:</strong> {{ match.video_name }}</p>
+    <p><strong>분석 상태:</strong> {{ match.get_status_display }}</p>
+    <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
+    <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+    <p><strong>업로드 사용자:</strong> {{ match.uploaded_by.username }}</p>
+
+    {% if match.home_team %}
+        <p><strong>홈팀:</strong> {{ match.home_team.name }}</p>
+    {% endif %}
+
+    {% if match.away_team %}
+        <p><strong>원정팀:</strong> {{ match.away_team.name }}</p>
+    {% endif %}
+
+    <hr>
+
+    <h3>업로드된 경기 영상</h3>
+
+    <video width="700" controls>
+        <source src="{{ match.video.url }}">
+        브라우저에서 영상을 재생할 수 없습니다.
+    </video>
+
+    <hr>
+
+    <h3>작업 메뉴</h3>
+
+    <a class="button" href="{% url 'video_analysis' match.id %}">영상 분석 화면</a>
+
+    {% if match.status == 'uploaded' %}
+        <a class="button" href="{% url 'video_analysis' match.id %}">분석 요청하기</a>
+    {% elif match.status == 'analyzing' %}
+        <a class="button" href="{% url 'analysis_status' match.id %}">분석 상태 확인</a>
+    {% elif match.status == 'completed' %}
+        <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
+    {% endif %}
+
+    <a class="button" href="{% url 'edit_match' match.id %}">경기 정보 수정</a>
+    <a class="button danger-button" href="{% url 'delete_match' match.id %}">경기 삭제</a>
+</div>
+
+<div class="card">
+    <a class="button" href="{% url 'match_list' %}">영상 분석 목록으로 돌아가기</a>
+    <a class="button" href="{% url 'match_manage' %}">경기 관리로 돌아가기</a>
+</div>
+{% endblock %}
