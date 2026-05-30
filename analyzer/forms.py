@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
+from .models import Match
 
 
 class SignUpForm(UserCreationForm):
@@ -20,3 +21,18 @@ class SignUpForm(UserCreationForm):
     class Meta:
         model = User
         fields = ['username', 'password1', 'password2']
+
+
+class MatchUploadForm(forms.ModelForm):
+    class Meta:
+        model = Match
+        fields = ['title', 'video']
+        labels = {
+            'title': '경기명',
+            'video': '경기 영상 파일',
+        }
+        widgets = {
+            'title': forms.TextInput(attrs={
+                'placeholder': '예: 단국대 vs OO대 경기'
+            }),
+        }
