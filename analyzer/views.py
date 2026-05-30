@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from .forms import SignUpForm, MatchUploadForm
+from .forms import SignUpForm, MatchUploadForm, MatchEditForm
 from .models import Match
 
 
@@ -62,3 +62,40 @@ def request_analysis(request, match_id):
 def analysis_status(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
     return render(request, 'analyzer/analysis_status.html', {'match': match})
+
+
+@login_required
+def match_manage(request):
+    matches = Match.objects.filter(uploaded_by=request.user).order_by('-created_at')
+    return render(request, 'analyzer/match_manage.html', {'matches': matches})
+
+
+@login_required
+def edit_match(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+
+    if request.method == 'POST':
+        form = MatchEditForm(request.POST, instance=match)
+
+        if form.is_valid():
+            form.save()
+            return redirect('match_manage')
+    else:
+        form = MatchEditForm(instance=match)
+
+    return render(request, 'analyzer/match_edit.html', {
+        'form': form,
+        'match': match,
+    })
+
+
+@login_required
+def delete_match(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+
+    if request.method == 'POST':
+        match.video.delete(save=False)
+        match.delete()
+        return redirect('match_manage')
+
+    return render(request, 'analyzer/match_delete.html', {'match': match})

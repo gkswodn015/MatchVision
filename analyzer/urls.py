@@ -17,4 +17,8 @@ urlpatterns = [
         views.analysis_status,
         name='analysis_status'
     ),
+
+    path('manage/', views.match_manage, name='match_manage'),
+    path('manage/<int:match_id>/edit/', views.edit_match, name='edit_match'),
+    path('manage/<int:match_id>/delete/', views.delete_match, name='delete_match'),
 ]

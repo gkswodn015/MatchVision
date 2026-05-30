@@ -36,3 +36,17 @@ class MatchUploadForm(forms.ModelForm):
                 'placeholder': '예: 단국대 vs OO대 경기'
             }),
         }
+
+
+class MatchEditForm(forms.ModelForm):
+    class Meta:
+        model = Match
+        fields = ['title']
+        labels = {
+            'title': '경기명',
+        }
+        widgets = {
+            'title': forms.TextInput(attrs={
+                'placeholder': '수정할 경기명을 입력하세요'
+            }),
+        }
