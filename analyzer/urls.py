@@ -22,6 +22,16 @@ urlpatterns = [
         views.analysis_status,
         name='analysis_status'
     ),
+    path(
+        'matches/<int:match_id>/generate-report/',
+        views.generate_report,
+        name='generate_report'
+    ),
+    path(
+        'matches/<int:match_id>/report/',
+        views.analysis_report,
+        name='analysis_report'
+    ),
 
     path('manage/', views.match_manage, name='match_manage'),
     path('manage/<int:match_id>/edit/', views.edit_match, name='edit_match'),

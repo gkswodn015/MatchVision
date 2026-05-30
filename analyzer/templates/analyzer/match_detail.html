@@ -34,8 +34,7 @@
     {% elif match.status == 'analyzing' %}
         <a class="button" href="{% url 'analysis_status' match.id %}">분석 상태 확인</a>
     {% elif match.status == 'completed' %}
-        <p>분석이 완료된 경기입니다.</p>
-        <p class="disabled">분석 리포트 페이지는 이후 단계에서 연결됩니다.</p>
+        <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
     {% endif %}
 
     <a class="button" href="{% url 'edit_match' match.id %}">경기명 수정</a>

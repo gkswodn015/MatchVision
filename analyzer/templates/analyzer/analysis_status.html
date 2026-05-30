@@ -22,16 +22,17 @@
     {% elif match.status == 'analyzing' %}
         <p>
             분석 요청이 접수되었습니다.
-            현재 YOLO/OpenCV 분석 시스템 연결 전 단계이므로,
-            실제 분석 결과 생성은 이후 단계에서 구현됩니다.
+            현재 단계에서는 실제 YOLO/OpenCV 결과 대신 더미 분석 결과를 생성합니다.
         </p>
-        <p class="disabled">
-            다음 단계에서 더미 분석 결과 생성 및 리포트 페이지와 연결할 예정입니다.
-        </p>
+
+        <form method="post" action="{% url 'generate_report' match.id %}">
+            {% csrf_token %}
+            <button class="button" type="submit">더미 분석 리포트 생성</button>
+        </form>
 
     {% elif match.status == 'completed' %}
         <p>분석이 완료된 영상입니다.</p>
-        <p class="disabled">리포트 보기 기능은 이후 단계에서 연결됩니다.</p>
+        <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
     {% endif %}
 </div>
 
