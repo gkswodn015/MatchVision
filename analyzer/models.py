@@ -10,6 +10,7 @@ class Match(models.Model):
     ]
 
     title = models.CharField(max_length=100)
+    video_name = models.CharField(max_length=100, default='전반전')
     video = models.FileField(upload_to='videos/')
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
     status = models.CharField(

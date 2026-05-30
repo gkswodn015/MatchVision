@@ -10,7 +10,7 @@
 
 <div class="card">
     <h3>{{ match.title }}</h3>
-
+    <p><strong>영상 이름:</strong> {{ match.video_name }}</p>
     <p><strong>분석 상태:</strong> {{ match.get_status_display }}</p>
     <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
     <p><strong>영상 파일:</strong> {{ match.video.name }}</p>

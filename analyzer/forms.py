@@ -5,9 +5,17 @@ from .models import Match
 
 
 class SignUpForm(UserCreationForm):
+    first_name = forms.CharField(
+        label='이름',
+        widget=forms.TextInput(attrs={'placeholder': '이름을 입력하세요'})
+    )
     username = forms.CharField(
         label='아이디',
         widget=forms.TextInput(attrs={'placeholder': '아이디를 입력하세요'})
+    )
+    email = forms.EmailField(
+        label='이메일',
+        widget=forms.EmailInput(attrs={'placeholder': '이메일을 입력하세요'})
     )
     password1 = forms.CharField(
         label='비밀번호',
@@ -20,20 +28,24 @@ class SignUpForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ['username', 'password1', 'password2']
+        fields = ['first_name', 'username', 'email', 'password1', 'password2']
 
 
 class MatchUploadForm(forms.ModelForm):
     class Meta:
         model = Match
-        fields = ['title', 'video']
+        fields = ['title', 'video_name', 'video']
         labels = {
-            'title': '경기명',
+            'title': '경기 이름',
+            'video_name': '영상 이름',
             'video': '경기 영상 파일',
         }
         widgets = {
             'title': forms.TextInput(attrs={
-                'placeholder': '예: 단국대 vs OO대 경기'
+                'placeholder': '예: 2026-04-01_홈팀 vs 원정팀'
+            }),
+            'video_name': forms.TextInput(attrs={
+                'placeholder': '예: 전반전, 후반전, 01번 클립'
             }),
         }
 
@@ -41,12 +53,16 @@ class MatchUploadForm(forms.ModelForm):
 class MatchEditForm(forms.ModelForm):
     class Meta:
         model = Match
-        fields = ['title']
+        fields = ['title', 'video_name']
         labels = {
-            'title': '경기명',
+            'title': '경기 이름',
+            'video_name': '영상 이름',
         }
         widgets = {
             'title': forms.TextInput(attrs={
-                'placeholder': '수정할 경기명을 입력하세요'
+                'placeholder': '수정할 경기 이름을 입력하세요'
+            }),
+            'video_name': forms.TextInput(attrs={
+                'placeholder': '수정할 영상 이름을 입력하세요'
             }),
         }
