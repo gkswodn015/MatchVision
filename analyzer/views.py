@@ -52,14 +52,62 @@ def match_detail(request, match_id):
     return render(request, 'analyzer/match_detail.html', {'match': match})
 
 
+def create_dummy_analysis_result(match):
+    analysis, created = AnalysisResult.objects.get_or_create(
+        match=match,
+        defaults={
+            'possession_team_a': 55.0,
+            'possession_team_b': 45.0,
+            'report_text': (
+                'YOLO와 OpenCV 분석 결과를 기반으로 생성된 경기 분석 리포트입니다. '
+                '현재는 실제 분석 알고리즘 연결 전 단계이므로 웹 기능 확인을 위한 더미 데이터입니다.'
+            ),
+        }
+    )
+
+    if created:
+        PlayerResult.objects.create(
+            analysis=analysis,
+            player_name='player_1',
+            team_name='Team A',
+            distance=5.2,
+            speed=12.3
+        )
+        PlayerResult.objects.create(
+            analysis=analysis,
+            player_name='player_2',
+            team_name='Team A',
+            distance=4.8,
+            speed=10.7
+        )
+        PlayerResult.objects.create(
+            analysis=analysis,
+            player_name='player_3',
+            team_name='Team B',
+            distance=5.6,
+            speed=13.1
+        )
+        PlayerResult.objects.create(
+            analysis=analysis,
+            player_name='player_4',
+            team_name='Team B',
+            distance=4.5,
+            speed=9.8
+        )
+
+    match.status = 'completed'
+    match.save()
+
+    return analysis
+
+
 @login_required
 def request_analysis(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
 
     if request.method == 'POST':
-        match.status = 'analyzing'
-        match.save()
-        return redirect('analysis_status', match_id=match.id)
+        create_dummy_analysis_result(match)
+        return redirect('analysis_report', match_id=match.id)
 
     return render(request, 'analyzer/analysis_request.html', {'match': match})
 
@@ -75,48 +123,7 @@ def generate_report(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
 
     if request.method == 'POST':
-        analysis, created = AnalysisResult.objects.get_or_create(
-            match=match,
-            defaults={
-                'possession_team_a': 55.0,
-                'possession_team_b': 45.0,
-                'report_text': 'YOLO와 OpenCV 분석 결과를 기반으로 생성된 경기 분석 리포트입니다. 현재는 웹 기능 구현을 위한 더미 데이터입니다.',
-            }
-        )
-
-        if created:
-            PlayerResult.objects.create(
-                analysis=analysis,
-                player_name='player_1',
-                team_name='Team A',
-                distance=5.2,
-                speed=12.3
-            )
-            PlayerResult.objects.create(
-                analysis=analysis,
-                player_name='player_2',
-                team_name='Team A',
-                distance=4.8,
-                speed=10.7
-            )
-            PlayerResult.objects.create(
-                analysis=analysis,
-                player_name='player_3',
-                team_name='Team B',
-                distance=5.6,
-                speed=13.1
-            )
-            PlayerResult.objects.create(
-                analysis=analysis,
-                player_name='player_4',
-                team_name='Team B',
-                distance=4.5,
-                speed=9.8
-            )
-
-        match.status = 'completed'
-        match.save()
-
+        create_dummy_analysis_result(match)
         return redirect('analysis_report', match_id=match.id)
 
     return redirect('analysis_status', match_id=match.id)

@@ -24,19 +24,23 @@
 
     {% if match.status == 'uploaded' %}
         <p>
-            아래 버튼을 누르면 해당 영상의 분석 상태가
-            <strong>분석 중</strong>으로 변경됩니다.
+            아래 버튼을 누르면 해당 영상에 대한 분석 요청이 실행되고,
+            웹 기능 확인을 위한 더미 분석 결과가 자동으로 생성됩니다.
         </p>
 
         <form method="post">
             {% csrf_token %}
-            <button class="button" type="submit">분석 요청하기</button>
+            <button class="button" type="submit">분석 요청 및 리포트 생성</button>
         </form>
     {% elif match.status == 'analyzing' %}
-        <p>이미 분석 요청이 완료된 영상입니다.</p>
-        <a class="button" href="{% url 'analysis_status' match.id %}">분석 상태 확인</a>
+        <p>이미 분석 요청이 진행 중인 영상입니다.</p>
+        <form method="post" action="{% url 'generate_report' match.id %}">
+            {% csrf_token %}
+            <button class="button" type="submit">더미 분석 리포트 생성</button>
+        </form>
     {% else %}
         <p>이미 분석이 완료된 영상입니다.</p>
+        <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
     {% endif %}
 </div>
 
