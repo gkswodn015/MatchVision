@@ -217,7 +217,7 @@ def edit_team_players(request, match_id):
             )
             player.save()
 
-        return redirect('team_player_manage')
+        return redirect('analysis_report', match_id=match.id)
 
     return render(request, 'analyzer/team_player_edit.html', {
         'match': match,
