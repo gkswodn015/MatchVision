@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}분석 요청 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>영상 분석 요청</h2>
+    <p>선택한 경기 영상에 대해 분석을 요청합니다.</p>
+</div>
+
+<div class="card">
+    <h3>{{ match.title }}</h3>
+
+    <p><strong>현재 분석 상태:</strong> {{ match.get_status_display }}</p>
+    <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
+    <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+    <video width="600" controls>
+        <source src="{{ match.video.url }}">
+        브라우저에서 영상을 재생할 수 없습니다.
+    </video>
+
+    <hr>
+
+    {% if match.status == 'uploaded' %}
+        <p>
+            아래 버튼을 누르면 해당 영상의 분석 상태가
+            <strong>분석 중</strong>으로 변경됩니다.
+        </p>
+
+        <form method="post">
+            {% csrf_token %}
+            <button class="button" type="submit">분석 요청하기</button>
+        </form>
+    {% elif match.status == 'analyzing' %}
+        <p>이미 분석 요청이 완료된 영상입니다.</p>
+        <a class="button" href="{% url 'analysis_status' match.id %}">분석 상태 확인</a>
+    {% else %}
+        <p>이미 분석이 완료된 영상입니다.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <a href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>
+</div>
+{% endblock %}
