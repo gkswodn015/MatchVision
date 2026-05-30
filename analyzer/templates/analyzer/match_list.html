@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 
-{% block title %}업로드 영상 목록 | Football Analyzer{% endblock %}
+{% block title %}영상 분석 | Football Analyzer{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h2>업로드 영상 목록</h2>
-    <p>현재 로그인한 사용자가 업로드한 축구 경기 영상 목록입니다.</p>
+    <h2>영상 분석 페이지</h2>
+    <p>업로드된 경기 영상 목록을 확인하고, 원하는 영상을 선택해 분석을 요청합니다.</p>
 
     <a class="button" href="{% url 'upload_match' %}">새 영상 업로드</a>
 </div>
@@ -14,10 +14,19 @@
     {% for match in matches %}
         <div class="card">
             <h3>{{ match.title }}</h3>
+
             <p><strong>영상 이름:</strong> {{ match.video_name }}</p>
             <p><strong>분석 상태:</strong> {{ match.get_status_display }}</p>
             <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
             <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+            {% if match.home_team %}
+                <p><strong>홈팀:</strong> {{ match.home_team.name }}</p>
+            {% endif %}
+
+            {% if match.away_team %}
+                <p><strong>원정팀:</strong> {{ match.away_team.name }}</p>
+            {% endif %}
 
             <video width="500" controls>
                 <source src="{{ match.video.url }}">
@@ -28,8 +37,9 @@
 
             <a class="button" href="{% url 'match_detail' match.id %}">상세 보기</a>
             <a class="button" href="{% url 'video_analysis' match.id %}">영상 분석 화면</a>
+
             {% if match.status == 'uploaded' %}
-                <a class="button" href="{% url 'request_analysis' match.id %}">분석 요청</a>
+                <a class="button" href="{% url 'video_analysis' match.id %}">분석 요청</a>
             {% elif match.status == 'analyzing' %}
                 <a class="button" href="{% url 'analysis_status' match.id %}">분석 상태 확인</a>
             {% elif match.status == 'completed' %}
