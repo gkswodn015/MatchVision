@@ -108,7 +108,7 @@
         {% if user.is_authenticated %}
             <span>{{ user.username }}님</span>
             <a href="{% url 'upload_match' %}">영상 업로드</a>
-            <span>영상 분석</span>
+            <a href="{% url 'match_list' %}">영상 분석</a>
             <span>경기 관리</span>
             <span>팀/선수 관리</span>
             <span>설정</span>

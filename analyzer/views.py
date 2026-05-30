@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from .forms import SignUpForm, MatchUploadForm
+from .models import Match
 
 
 def main(request):
@@ -32,8 +33,14 @@ def upload_match(request):
             match.uploaded_by = request.user
             match.status = 'uploaded'
             match.save()
-            return redirect('main')
+            return redirect('match_list')
     else:
         form = MatchUploadForm()
 
     return render(request, 'analyzer/upload.html', {'form': form})
+
+
+@login_required
+def match_list(request):
+    matches = Match.objects.filter(uploaded_by=request.user).order_by('-created_at')
+    return render(request, 'analyzer/match_list.html', {'matches': matches})

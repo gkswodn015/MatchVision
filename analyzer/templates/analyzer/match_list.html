@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}업로드 영상 목록 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>업로드 영상 목록</h2>
+    <p>현재 로그인한 사용자가 업로드한 축구 경기 영상 목록입니다.</p>
+
+    <a class="button" href="{% url 'upload_match' %}">새 영상 업로드</a>
+</div>
+
+{% if matches %}
+    {% for match in matches %}
+        <div class="card">
+            <h3>{{ match.title }}</h3>
+
+            <p><strong>분석 상태:</strong> {{ match.get_status_display }}</p>
+            <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
+            <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+            <video width="500" controls>
+                <source src="{{ match.video.url }}">
+                브라우저에서 영상을 재생할 수 없습니다.
+            </video>
+
+            <br><br>
+
+            <p class="disabled">
+                분석 요청 기능은 다음 단계에서 추가됩니다.
+            </p>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <h3>업로드된 영상이 없습니다.</h3>
+        <p>먼저 경기 영상을 업로드해 주세요.</p>
+        <a class="button" href="{% url 'upload_match' %}">영상 업로드하기</a>
+    </div>
+{% endif %}
+{% endblock %}
