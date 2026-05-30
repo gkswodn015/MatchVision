@@ -59,7 +59,21 @@ def match_detail(request, match_id):
     return render(request, 'analyzer/match_detail.html', {'match': match})
 
 
+@login_required
+def video_analysis(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+    teams = Team.objects.filter(user=request.user).order_by('name')
+
+    return render(request, 'analyzer/video_analysis.html', {
+        'match': match,
+        'teams': teams,
+    })
+
+
 def create_dummy_analysis_result(match):
+    home_name = match.home_team.name if match.home_team else 'Home Team'
+    away_name = match.away_team.name if match.away_team else 'Away Team'
+
     analysis, created = AnalysisResult.objects.get_or_create(
         match=match,
         defaults={
@@ -76,30 +90,30 @@ def create_dummy_analysis_result(match):
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_1',
-            team_name='Team A',
-            distance=5.2,
-            speed=12.3
+            team_name=home_name,
+            distance=11.2,
+            speed=8.4
         )
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_2',
-            team_name='Team A',
-            distance=4.8,
-            speed=10.7
+            team_name=home_name,
+            distance=9.8,
+            speed=7.9
         )
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_3',
-            team_name='Team B',
-            distance=5.6,
-            speed=13.1
+            team_name=away_name,
+            distance=10.5,
+            speed=8.1
         )
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_4',
-            team_name='Team B',
-            distance=4.5,
-            speed=9.8
+            team_name=away_name,
+            distance=8.7,
+            speed=7.4
         )
 
     match.status = 'completed'
@@ -113,6 +127,24 @@ def request_analysis(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
 
     if request.method == 'POST':
+        home_team_id = request.POST.get('home_team')
+        away_team_id = request.POST.get('away_team')
+
+        if home_team_id:
+            match.home_team = Team.objects.filter(
+                id=home_team_id,
+                user=request.user
+            ).first()
+
+        if away_team_id:
+            match.away_team = Team.objects.filter(
+                id=away_team_id,
+                user=request.user
+            ).first()
+
+        match.status = 'analyzing'
+        match.save()
+
         create_dummy_analysis_result(match)
         return redirect('analysis_report', match_id=match.id)
 

@@ -14,6 +14,11 @@ urlpatterns = [
         name='match_detail'
     ),
     path(
+        'matches/<int:match_id>/analysis/',
+        views.video_analysis,
+        name='video_analysis'
+    ),
+    path(
         'matches/<int:match_id>/request-analysis/',
         views.request_analysis,
         name='request_analysis'

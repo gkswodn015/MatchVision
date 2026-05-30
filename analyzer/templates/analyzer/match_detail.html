@@ -29,6 +29,8 @@
 
     <h3>작업 메뉴</h3>
 
+    <a class="button" href="{% url 'video_analysis' match.id %}">영상 분석 화면</a>
+    
     {% if match.status == 'uploaded' %}
         <a class="button" href="{% url 'request_analysis' match.id %}">분석 요청하기</a>
     {% elif match.status == 'analyzing' %}

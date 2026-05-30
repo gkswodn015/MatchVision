@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+
 class Team(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
@@ -20,7 +21,8 @@ class Player(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
 class Match(models.Model):
     STATUS_CHOICES = [
         ('uploaded', '업로드 완료'),
@@ -32,6 +34,22 @@ class Match(models.Model):
     video_name = models.CharField(max_length=100, default='전반전')
     video = models.FileField(upload_to='videos/')
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    home_team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='home_matches'
+    )
+    away_team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='away_matches'
+    )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
