@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Match
+from .models import Match, Team, Player
 
 
 class SignUpForm(UserCreationForm):
@@ -66,3 +66,39 @@ class MatchEditForm(forms.ModelForm):
                 'placeholder': '수정할 영상 이름을 입력하세요'
             }),
         }
+
+class TeamForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ['name', 'league']
+        labels = {
+            'name': '팀 이름',
+            'league': '소속 리그',
+        }
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': '예: XX FC'}),
+            'league': forms.TextInput(attrs={'placeholder': '예: X 리그'}),
+        }
+
+
+class PlayerForm(forms.ModelForm):
+    class Meta:
+        model = Player
+        fields = ['team', 'jersey_number', 'position', 'name']
+        labels = {
+            'team': '소속 팀',
+            'jersey_number': '등번호',
+            'position': '포지션',
+            'name': '선수 이름',
+        }
+        widgets = {
+            'position': forms.TextInput(attrs={'placeholder': '예: FW, MF, DF, GK'}),
+            'name': forms.TextInput(attrs={'placeholder': '선수 이름'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+        if user:
+            self.fields['team'].queryset = Team.objects.filter(user=user)

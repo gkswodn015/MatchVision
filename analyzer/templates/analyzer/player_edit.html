@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}선수 수정 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>선수 정보 수정</h2>
+    <p>선수의 소속 팀, 등번호, 포지션, 이름을 수정합니다.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+
+        <button class="button" type="submit">수정 저장</button>
+        <a class="button" href="{% url 'team_player_manage' %}">취소</a>
+    </form>
+</div>
+{% endblock %}

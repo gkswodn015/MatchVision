@@ -1,8 +1,15 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from .forms import SignUpForm, MatchUploadForm, MatchEditForm
-from .models import Match, AnalysisResult, PlayerResult
+
+from .forms import (
+    SignUpForm,
+    MatchUploadForm,
+    MatchEditForm,
+    TeamForm,
+    PlayerForm,
+)
+from .models import Match, AnalysisResult, PlayerResult, Team, Player
 
 
 def main(request):
@@ -190,13 +197,106 @@ def delete_match(request, match_id):
 
 @login_required
 def team_player_manage(request):
+    teams = Team.objects.filter(user=request.user).order_by('-created_at')
+    players = Player.objects.filter(user=request.user).select_related('team').order_by(
+        'team__name',
+        'jersey_number'
+    )
     analyses = AnalysisResult.objects.filter(
         match__uploaded_by=request.user
     ).order_by('-created_at')
 
+    team_form = TeamForm()
+    player_form = PlayerForm(user=request.user)
+
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type')
+
+        if form_type == 'team':
+            team_form = TeamForm(request.POST)
+
+            if team_form.is_valid():
+                team = team_form.save(commit=False)
+                team.user = request.user
+                team.save()
+                return redirect('team_player_manage')
+
+        elif form_type == 'player':
+            player_form = PlayerForm(request.POST, user=request.user)
+
+            if player_form.is_valid():
+                player = player_form.save(commit=False)
+                player.user = request.user
+                player.save()
+                return redirect('team_player_manage')
+
     return render(request, 'analyzer/team_player_manage.html', {
+        'teams': teams,
+        'players': players,
         'analyses': analyses,
+        'team_form': team_form,
+        'player_form': player_form,
     })
+
+
+@login_required
+def edit_team(request, team_id):
+    team = get_object_or_404(Team, id=team_id, user=request.user)
+
+    if request.method == 'POST':
+        form = TeamForm(request.POST, instance=team)
+
+        if form.is_valid():
+            form.save()
+            return redirect('team_player_manage')
+    else:
+        form = TeamForm(instance=team)
+
+    return render(request, 'analyzer/team_edit.html', {
+        'form': form,
+        'team': team,
+    })
+
+
+@login_required
+def delete_team(request, team_id):
+    team = get_object_or_404(Team, id=team_id, user=request.user)
+
+    if request.method == 'POST':
+        team.delete()
+        return redirect('team_player_manage')
+
+    return render(request, 'analyzer/team_delete.html', {'team': team})
+
+
+@login_required
+def edit_player(request, player_id):
+    player = get_object_or_404(Player, id=player_id, user=request.user)
+
+    if request.method == 'POST':
+        form = PlayerForm(request.POST, instance=player, user=request.user)
+
+        if form.is_valid():
+            form.save()
+            return redirect('team_player_manage')
+    else:
+        form = PlayerForm(instance=player, user=request.user)
+
+    return render(request, 'analyzer/player_edit.html', {
+        'form': form,
+        'player': player,
+    })
+
+
+@login_required
+def delete_player(request, player_id):
+    player = get_object_or_404(Player, id=player_id, user=request.user)
+
+    if request.method == 'POST':
+        player.delete()
+        return redirect('team_player_manage')
+
+    return render(request, 'analyzer/player_delete.html', {'player': player})
 
 
 @login_required
