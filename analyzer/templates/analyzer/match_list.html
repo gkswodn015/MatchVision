@@ -26,6 +26,8 @@
 
             <br><br>
 
+            <a class="button" href="{% url 'match_detail' match.id %}">상세 보기</a>
+
             {% if match.status == 'uploaded' %}
                 <a class="button" href="{% url 'request_analysis' match.id %}">분석 요청</a>
             {% elif match.status == 'analyzing' %}

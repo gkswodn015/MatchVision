@@ -26,6 +26,7 @@
 
             <br><br>
 
+            <a class="button" href="{% url 'match_detail' match.id %}">상세 보기</a>
             <a class="button" href="{% url 'edit_match' match.id %}">경기명 수정</a>
             <a class="button" href="{% url 'delete_match' match.id %}">경기 삭제</a>
 

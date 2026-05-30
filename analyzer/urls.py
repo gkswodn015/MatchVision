@@ -8,6 +8,11 @@ urlpatterns = [
     path('matches/', views.match_list, name='match_list'),
 
     path(
+        'matches/<int:match_id>/',
+        views.match_detail,
+        name='match_detail'
+    ),
+    path(
         'matches/<int:match_id>/request-analysis/',
         views.request_analysis,
         name='request_analysis'
