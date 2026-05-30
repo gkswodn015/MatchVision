@@ -71,7 +71,8 @@
     <h3>탑뷰 / 히트맵 캔버스</h3>
     <p>탑뷰 기반 위치 추적과 히트맵을 표시하는 영역입니다.</p>
     <p><strong>히트맵 투명도:</strong> {{ report_settings.heatmap_opacity }}%</p>
-
+    <p><strong>트래킹 오버레이:</strong> {% if report_settings.tracking_overlay %}표시{% else %}숨김{% endif %}</p>
+    
     <div style="height: 300px; border: 2px dashed #999; display:flex; align-items:center; justify-content:center;">
         탑뷰 캔버스 + 히트맵 표시 영역
     </div>

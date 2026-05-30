@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 
 from .forms import (
     SignUpForm,
@@ -436,20 +437,67 @@ def settings_page(request):
         'show_speed': True,
         'show_summary': True,
         'heatmap_opacity': 60,
+        'theme_color': 'green',
+        'tracking_overlay': True,
     })
 
     if request.method == 'POST':
-        current_settings = {
-            'show_tracking': 'show_tracking' in request.POST,
-            'show_path': 'show_path' in request.POST,
-            'show_topview': 'show_topview' in request.POST,
-            'show_speed': 'show_speed' in request.POST,
-            'show_summary': 'show_summary' in request.POST,
-            'heatmap_opacity': int(request.POST.get('heatmap_opacity', 60)),
-        }
+        form_type = request.POST.get('form_type')
 
-        request.session['report_settings'] = current_settings
-        return redirect('settings_page')
+        if form_type == 'profile':
+            request.user.first_name = request.POST.get(
+                'first_name',
+                request.user.first_name
+            )
+            request.user.email = request.POST.get(
+                'email',
+                request.user.email
+            )
+            request.user.save()
+
+            messages.success(request, '개인정보가 수정되었습니다.')
+            return redirect('settings_page')
+
+        if form_type == 'password':
+            current_password = request.POST.get('current_password')
+            new_password = request.POST.get('new_password')
+            confirm_password = request.POST.get('confirm_password')
+
+            if not request.user.check_password(current_password):
+                messages.error(request, '현재 비밀번호가 일치하지 않습니다.')
+            elif not new_password:
+                messages.error(request, '새 비밀번호를 입력하세요.')
+            elif new_password != confirm_password:
+                messages.error(request, '새 비밀번호와 비밀번호 확인이 일치하지 않습니다.')
+            else:
+                request.user.set_password(new_password)
+                request.user.save()
+                update_session_auth_hash(request, request.user)
+                messages.success(request, '비밀번호가 변경되었습니다.')
+
+            return redirect('settings_page')
+
+        if form_type == 'display':
+            current_settings = {
+                'show_tracking': 'show_tracking' in request.POST,
+                'show_path': 'show_path' in request.POST,
+                'show_topview': 'show_topview' in request.POST,
+                'show_speed': 'show_speed' in request.POST,
+                'show_summary': 'show_summary' in request.POST,
+                'heatmap_opacity': int(request.POST.get('heatmap_opacity', 60)),
+                'theme_color': request.POST.get('theme_color', 'green'),
+                'tracking_overlay': 'tracking_overlay' in request.POST,
+            }
+
+            request.session['report_settings'] = current_settings
+            messages.success(request, '화면 및 리포트 설정이 저장되었습니다.')
+            return redirect('settings_page')
+
+        if form_type == 'delete_account':
+            user = request.user
+            logout(request)
+            user.delete()
+            return redirect('main')
 
     return render(request, 'analyzer/settings.html', {
         'settings': current_settings,

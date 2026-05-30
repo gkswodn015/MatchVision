@@ -3,7 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Football Analyzer{% endblock %}</title>
+
+    {% with theme=request.session.report_settings.theme_color %}
     <style>
+        :root {
+            {% if theme == 'lime' %}
+                --main-color: #84cc16;
+                --dark-color: #3f6212;
+            {% elif theme == 'blue' %}
+                --main-color: #2563eb;
+                --dark-color: #1e3a8a;
+            {% elif theme == 'purple' %}
+                --main-color: #7c3aed;
+                --dark-color: #4c1d95;
+            {% else %}
+                --main-color: #1f4f3a;
+                --dark-color: #12372a;
+            {% endif %}
+        }
+
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -12,7 +30,7 @@
         }
 
         header {
-            background-color: #12372a;
+            background-color: var(--dark-color);
             color: white;
             padding: 20px 40px;
         }
@@ -22,7 +40,7 @@
         }
 
         nav {
-            background-color: #1f4f3a;
+            background-color: var(--main-color);
             padding: 12px 40px;
         }
 
@@ -70,7 +88,7 @@
         .button {
             display: inline-block;
             padding: 10px 16px;
-            background-color: #1f4f3a;
+            background-color: var(--main-color);
             color: white;
             border-radius: 8px;
             text-decoration: none;
@@ -81,7 +99,7 @@
         }
 
         .button:hover {
-            background-color: #12372a;
+            background-color: var(--dark-color);
         }
 
         .danger-button {
@@ -112,6 +130,12 @@
             border: 1px solid #ccc;
         }
 
+        input, select {
+            padding: 8px;
+            margin-top: 4px;
+            min-width: 240px;
+        }
+
         footer {
             margin-top: 40px;
             padding: 20px 40px;
@@ -120,6 +144,7 @@
             font-size: 14px;
         }
     </style>
+    {% endwith %}
 </head>
 <body>
     <header>
