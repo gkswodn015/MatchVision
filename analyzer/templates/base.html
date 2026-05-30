@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Football Analyzer{% endblock %}</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            color: #222;
+        }
+
+        header {
+            background-color: #12372a;
+            color: white;
+            padding: 20px 40px;
+        }
+
+        header h1 {
+            margin: 0;
+        }
+
+        nav {
+            background-color: #1f4f3a;
+            padding: 12px 40px;
+        }
+
+        nav a, nav span {
+            color: white;
+            margin-right: 18px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        nav a:hover {
+            text-decoration: underline;
+        }
+
+        .container {
+            padding: 40px;
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-top: 24px;
+        }
+
+        .menu-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .menu-card h3 {
+            margin-top: 0;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 16px;
+            background-color: #1f4f3a;
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            background-color: #12372a;
+        }
+
+        .disabled {
+            color: #777;
+            font-size: 14px;
+        }
+
+        footer {
+            margin-top: 40px;
+            padding: 20px 40px;
+            background-color: #ddd;
+            color: #555;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Football Analyzer</h1>
+        <p>OpenCV와 YOLO 기반 축구 경기 영상 분석 프로그램</p>
+    </header>
+
+    <nav>
+        <a href="{% url 'main' %}">홈</a>
+
+        {% if user.is_authenticated %}
+            <span>{{ user.username }}님</span>
+            <span>영상 업로드</span>
+            <span>영상 분석</span>
+            <span>경기 관리</span>
+            <span>팀/선수 관리</span>
+            <span>설정</span>
+
+            <form method="post" action="{% url 'logout' %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="button">로그아웃</button>
+            </form>
+        {% else %}
+            <a href="{% url 'login' %}">로그인</a>
+            <a href="{% url 'signup' %}">회원가입</a>
+        {% endif %}
+    </nav>
+
+    <main class="container">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <footer>
+        Football Analyzer Project | SW 오픈소스 팀 프로젝트
+    </footer>
+</body>
+</html>

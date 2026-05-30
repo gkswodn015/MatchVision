@@ -1,35 +1,66 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <title>Football Analyzer</title>
-</head>
-<body>
-    <h1>Football Analyzer</h1>
-    <p>OpenCV와 YOLO 기반 축구 경기 영상 분석 프로그램입니다.</p>
+{% extends 'base.html' %}
 
-    <hr>
+{% block title %}메인 화면 | Football Analyzer{% endblock %}
 
-    {% if user.is_authenticated %}
-        <p>{{ user.username }}님, 환영합니다.</p>
+{% block content %}
+<div class="card">
+    <h2>메인 화면</h2>
+    <p>
+        Football Analyzer는 축구 경기 영상을 업로드하고,
+        YOLO와 OpenCV 기반 분석 결과를 웹에서 확인할 수 있는 프로그램입니다.
+    </p>
+</div>
 
-        <h3>메뉴</h3>
-        <ul>
-            <li>영상 업로드 페이지</li>
-            <li>영상 분석 페이지</li>
-            <li>경기 관리</li>
-            <li>팀/선수 관리</li>
-            <li>설정</li>
-        </ul>
+{% if user.is_authenticated %}
+    <div class="card">
+        <h2>웹 서비스 메뉴</h2>
+        <p>아래 메뉴를 통해 경기 영상 업로드, 분석 요청, 리포트 확인, 팀/선수 관리를 진행할 수 있습니다.</p>
 
-        <form method="post" action="{% url 'logout' %}">
-            {% csrf_token %}
-            <button type="submit">로그아웃</button>
-        </form>
-    {% else %}
-        <a href="{% url 'login' %}">로그인</a>
-        <br>
-        <a href="{% url 'signup' %}">회원가입</a>
-    {% endif %}
-</body>
-</html>
+        <div class="menu-grid">
+            <div class="menu-card">
+                <h3>영상 업로드 페이지</h3>
+                <p>분석할 축구 경기 영상을 업로드하는 페이지입니다.</p>
+                <p class="disabled">다음 단계에서 구현 예정</p>
+            </div>
+
+            <div class="menu-card">
+                <h3>영상 분석 페이지</h3>
+                <p>업로드한 영상 목록을 확인하고 분석을 요청하는 페이지입니다.</p>
+                <p class="disabled">다음 단계에서 구현 예정</p>
+            </div>
+
+            <div class="menu-card">
+                <h3>경기 관리</h3>
+                <p>업로드된 경기 정보를 조회, 수정, 삭제할 수 있는 관리 페이지입니다.</p>
+                <p class="disabled">추후 구현 예정</p>
+            </div>
+
+            <div class="menu-card">
+                <h3>팀/선수 관리</h3>
+                <p>분석 결과에 표시되는 팀 이름과 선수 이름을 수정하는 페이지입니다.</p>
+                <p class="disabled">추후 구현 예정</p>
+            </div>
+
+            <div class="menu-card">
+                <h3>분석 리포트</h3>
+                <p>선수 이동 거리, 속도, 점유율, 탑뷰 결과를 확인하는 페이지입니다.</p>
+                <p class="disabled">추후 구현 예정</p>
+            </div>
+
+            <div class="menu-card">
+                <h3>설정</h3>
+                <p>분석 옵션과 리포트 표시 옵션을 관리하는 페이지입니다.</p>
+                <p class="disabled">추후 구현 예정</p>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="card">
+        <h2>서비스 이용하기</h2>
+        <p>경기 영상을 업로드하고 분석하려면 로그인 또는 회원가입이 필요합니다.</p>
+
+        <a class="button" href="{% url 'login' %}">로그인</a>
+        <a class="button" href="{% url 'signup' %}">회원가입</a>
+    </div>
+{% endif %}
+{% endblock %}
