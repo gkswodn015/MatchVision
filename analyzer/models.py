@@ -69,7 +69,16 @@ class AnalysisResult(models.Model):
     )
     possession_team_a = models.FloatField(default=0)
     possession_team_b = models.FloatField(default=0)
+    highest_speed = models.FloatField(default=0)
+
+    match_info_url = models.URLField(blank=True)
+    score_info = models.CharField(max_length=100, blank=True)
+    goal_records = models.TextField(blank=True)
+    lineup_info = models.TextField(blank=True)
+    team_stats = models.TextField(blank=True)
+
     report_text = models.TextField(blank=True)
+    is_saved = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -86,6 +95,7 @@ class PlayerResult(models.Model):
     team_name = models.CharField(max_length=50)
     distance = models.FloatField(default=0)
     speed = models.FloatField(default=0)
+    max_speed = models.FloatField(default=0)
 
     def __str__(self):
         return f'{self.team_name} - {self.player_name}'

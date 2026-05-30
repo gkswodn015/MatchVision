@@ -79,6 +79,20 @@ def create_dummy_analysis_result(match):
         defaults={
             'possession_team_a': 55.0,
             'possession_team_b': 45.0,
+            'highest_speed': 34.1,
+            'score_info': f'{home_name} 2 : 1 {away_name}',
+            'goal_records': (
+                f'{home_name}: 전반 23분 득점, 후반 12분 득점\n'
+                f'{away_name}: 후반 31분 득점'
+            ),
+            'lineup_info': (
+                f'{home_name}: player_1, player_2\n'
+                f'{away_name}: player_3, player_4'
+            ),
+            'team_stats': (
+                f'{home_name} 점유율 55%, 슈팅 8회, 패스 성공률 82%\n'
+                f'{away_name} 점유율 45%, 슈팅 6회, 패스 성공률 78%'
+            ),
             'report_text': (
                 'YOLO와 OpenCV 분석 결과를 기반으로 생성된 경기 분석 리포트입니다. '
                 '현재는 실제 분석 알고리즘 연결 전 단계이므로 웹 기능 확인을 위한 더미 데이터입니다.'
@@ -92,28 +106,32 @@ def create_dummy_analysis_result(match):
             player_name='player_1',
             team_name=home_name,
             distance=11.2,
-            speed=8.4
+            speed=8.4,
+            max_speed=34.1
         )
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_2',
             team_name=home_name,
             distance=9.8,
-            speed=7.9
+            speed=7.9,
+            max_speed=30.5
         )
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_3',
             team_name=away_name,
             distance=10.5,
-            speed=8.1
+            speed=8.1,
+            max_speed=32.2
         )
         PlayerResult.objects.create(
             analysis=analysis,
             player_name='player_4',
             team_name=away_name,
             distance=8.7,
-            speed=7.4
+            speed=7.4,
+            max_speed=28.9
         )
 
     match.status = 'completed'
@@ -180,6 +198,7 @@ def analysis_report(request, match_id):
         'show_topview': True,
         'show_speed': True,
         'show_summary': True,
+        'heatmap_opacity': 60,
     })
 
     return render(request, 'analyzer/analysis_report.html', {
@@ -188,6 +207,56 @@ def analysis_report(request, match_id):
         'players': players,
         'report_settings': report_settings,
     })
+
+
+@login_required
+def update_report_info(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+    analysis = get_object_or_404(AnalysisResult, match=match)
+
+    if request.method == 'POST':
+        url = request.POST.get('match_info_url', '')
+        analysis.match_info_url = url
+
+        if url:
+            home_name = match.home_team.name if match.home_team else '홈팀'
+            away_name = match.away_team.name if match.away_team else '원정팀'
+
+            analysis.score_info = f'{home_name} 2 : 1 {away_name}'
+            analysis.goal_records = (
+                f'전반 23분 {home_name} 득점\n'
+                f'후반 12분 {home_name} 득점\n'
+                f'후반 31분 {away_name} 득점'
+            )
+            analysis.lineup_info = (
+                f'{home_name} 라인업: GK, DF, MF, FW\n'
+                f'{away_name} 라인업: GK, DF, MF, FW'
+            )
+            analysis.team_stats = (
+                f'{home_name} 점유율 55%, 슈팅 8회, 패스 성공률 82%\n'
+                f'{away_name} 점유율 45%, 슈팅 6회, 패스 성공률 78%'
+            )
+        else:
+            analysis.score_info = ''
+            analysis.goal_records = ''
+            analysis.lineup_info = ''
+            analysis.team_stats = ''
+
+        analysis.save()
+
+    return redirect('analysis_report', match_id=match.id)
+
+
+@login_required
+def save_report(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+    analysis = get_object_or_404(AnalysisResult, match=match)
+
+    if request.method == 'POST':
+        analysis.is_saved = True
+        analysis.save()
+
+    return redirect('analysis_report', match_id=match.id)
 
 
 @login_required
@@ -366,6 +435,7 @@ def settings_page(request):
         'show_topview': True,
         'show_speed': True,
         'show_summary': True,
+        'heatmap_opacity': 60,
     })
 
     if request.method == 'POST':
@@ -375,6 +445,7 @@ def settings_page(request):
             'show_topview': 'show_topview' in request.POST,
             'show_speed': 'show_speed' in request.POST,
             'show_summary': 'show_summary' in request.POST,
+            'heatmap_opacity': int(request.POST.get('heatmap_opacity', 60)),
         }
 
         request.session['report_settings'] = current_settings
