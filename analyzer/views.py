@@ -128,10 +128,19 @@ def analysis_report(request, match_id):
     analysis = get_object_or_404(AnalysisResult, match=match)
     players = analysis.players.all()
 
+    report_settings = request.session.get('report_settings', {
+        'show_tracking': True,
+        'show_path': True,
+        'show_topview': True,
+        'show_speed': True,
+        'show_summary': True,
+    })
+
     return render(request, 'analyzer/analysis_report.html', {
         'match': match,
         'analysis': analysis,
         'players': players,
+        'report_settings': report_settings,
     })
 
 
@@ -207,4 +216,31 @@ def edit_team_players(request, match_id):
         'match': match,
         'analysis': analysis,
         'players': players,
+    })
+
+
+@login_required
+def settings_page(request):
+    current_settings = request.session.get('report_settings', {
+        'show_tracking': True,
+        'show_path': True,
+        'show_topview': True,
+        'show_speed': True,
+        'show_summary': True,
+    })
+
+    if request.method == 'POST':
+        current_settings = {
+            'show_tracking': 'show_tracking' in request.POST,
+            'show_path': 'show_path' in request.POST,
+            'show_topview': 'show_topview' in request.POST,
+            'show_speed': 'show_speed' in request.POST,
+            'show_summary': 'show_summary' in request.POST,
+        }
+
+        request.session['report_settings'] = current_settings
+        return redirect('settings_page')
+
+    return render(request, 'analyzer/settings.html', {
+        'settings': current_settings,
     })

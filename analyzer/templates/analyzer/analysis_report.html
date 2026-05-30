@@ -16,70 +16,81 @@
     <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
 </div>
 
-<div class="card">
-    <h3>팀 점유율</h3>
+{% if report_settings.show_tracking %}
+    <div class="card">
+        <h3>팀 점유율</h3>
 
-    <p><strong>Team A:</strong> {{ analysis.possession_team_a }}%</p>
-    <p><strong>Team B:</strong> {{ analysis.possession_team_b }}%</p>
-</div>
-
-<div class="card">
-    <h3>선수별 분석 결과</h3>
-
-    <table border="1" cellpadding="10">
-        <tr>
-            <th>선수 이름</th>
-            <th>팀 이름</th>
-            <th>이동 거리</th>
-            <th>평균 속도</th>
-        </tr>
-
-        {% for player in players %}
-            <tr>
-                <td>{{ player.player_name }}</td>
-                <td>{{ player.team_name }}</td>
-                <td>{{ player.distance }} km</td>
-                <td>{{ player.speed }} km/h</td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="4">선수별 분석 결과가 없습니다.</td>
-            </tr>
-        {% endfor %}
-    </table>
-</div>
-
-<div class="card">
-    <h3>이동 경로 시각화</h3>
-    <p>
-        선수 및 공의 이동 경로를 선 형태로 표시하는 영역입니다.
-        현재는 웹페이지 구현 단계이므로 실제 이동 경로 이미지는 추후 YOLO/OpenCV 분석 결과와 연결됩니다.
-    </p>
-
-    <div style="height: 220px; border: 2px dashed #999; display: flex; align-items: center; justify-content: center;">
-        이동 경로 시각화 영역
+        <p><strong>Team A:</strong> {{ analysis.possession_team_a }}%</p>
+        <p><strong>Team B:</strong> {{ analysis.possession_team_b }}%</p>
     </div>
-</div>
+{% endif %}
 
-<div class="card">
-    <h3>탑뷰 분석 결과</h3>
-    <p>
-        경기장을 위에서 내려다본 형태로 선수 위치를 표시하는 영역입니다.
-        실제 탑뷰 이미지는 추후 분석 알고리즘 결과 파일과 연결됩니다.
-    </p>
+{% if report_settings.show_speed %}
+    <div class="card">
+        <h3>선수별 분석 결과</h3>
 
-    <div style="height: 220px; border: 2px dashed #999; display: flex; align-items: center; justify-content: center;">
-        탑뷰 결과 표시 영역
+        <table border="1" cellpadding="10">
+            <tr>
+                <th>선수 이름</th>
+                <th>팀 이름</th>
+                <th>이동 거리</th>
+                <th>평균 속도</th>
+            </tr>
+
+            {% for player in players %}
+                <tr>
+                    <td>{{ player.player_name }}</td>
+                    <td>{{ player.team_name }}</td>
+                    <td>{{ player.distance }} km</td>
+                    <td>{{ player.speed }} km/h</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4">선수별 분석 결과가 없습니다.</td>
+                </tr>
+            {% endfor %}
+        </table>
     </div>
-</div>
+{% endif %}
 
-<div class="card">
-    <h3>리포트 내용</h3>
-    <p>{{ analysis.report_text }}</p>
-</div>
+{% if report_settings.show_path %}
+    <div class="card">
+        <h3>이동 경로 시각화</h3>
+        <p>
+            선수 및 공의 이동 경로를 선 형태로 표시하는 영역입니다.
+            현재는 웹페이지 구현 단계이므로 실제 이동 경로 이미지는 추후 YOLO/OpenCV 분석 결과와 연결됩니다.
+        </p>
+
+        <div style="height: 220px; border: 2px dashed #999; display: flex; align-items: center; justify-content: center;">
+            이동 경로 시각화 영역
+        </div>
+    </div>
+{% endif %}
+
+{% if report_settings.show_topview %}
+    <div class="card">
+        <h3>탑뷰 분석 결과</h3>
+        <p>
+            경기장을 위에서 내려다본 형태로 선수 위치를 표시하는 영역입니다.
+            실제 탑뷰 이미지는 추후 분석 알고리즘 결과 파일과 연결됩니다.
+        </p>
+
+        <div style="height: 220px; border: 2px dashed #999; display: flex; align-items: center; justify-content: center;">
+            탑뷰 결과 표시 영역
+        </div>
+    </div>
+{% endif %}
+
+{% if report_settings.show_summary %}
+    <div class="card">
+        <h3>리포트 내용</h3>
+        <p>{{ analysis.report_text }}</p>
+    </div>
+{% endif %}
 
 <div class="card">
     <a class="button" href="{% url 'edit_team_players' match.id %}">팀/선수 이름 수정</a>
+    <a class="button" href="{% url 'settings_page' %}">리포트 설정 변경</a>
     <a class="button" href="{% url 'match_detail' match.id %}">경기 상세로 돌아가기</a>
     <a class="button" href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>
     <a class="button" href="{% url 'match_manage' %}">경기 관리로 돌아가기</a>

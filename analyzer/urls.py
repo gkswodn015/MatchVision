@@ -43,4 +43,6 @@ urlpatterns = [
         views.edit_team_players,
         name='edit_team_players'
     ),
+
+    path('settings/', views.settings_page, name='settings_page'),
 ]
