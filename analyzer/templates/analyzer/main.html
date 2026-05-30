@@ -14,7 +14,10 @@
 {% if user.is_authenticated %}
     <div class="card">
         <h2>웹 서비스 메뉴</h2>
-        <p>아래 메뉴를 통해 경기 영상 업로드, 분석 요청, 리포트 확인, 팀/선수 관리를 진행할 수 있습니다.</p>
+        <p>
+            아래 메뉴를 통해 경기 영상 업로드, 분석 요청, 리포트 확인,
+            경기 관리, 팀/선수 관리, 설정을 진행할 수 있습니다.
+        </p>
 
         <div class="menu-grid">
             <div class="menu-card">
@@ -26,7 +29,7 @@
             <div class="menu-card">
                 <h3>영상 분석 페이지</h3>
                 <p>업로드한 영상 목록을 확인하고 분석을 요청하는 페이지입니다.</p>
-                <a class="button" href="{% url 'match_list' %}">영상 목록 보기</a>
+                <a class="button" href="{% url 'match_list' %}">영상 분석하기</a>
             </div>
 
             <div class="menu-card">
