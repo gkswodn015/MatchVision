@@ -170,3 +170,41 @@ def delete_match(request, match_id):
         return redirect('match_manage')
 
     return render(request, 'analyzer/match_delete.html', {'match': match})
+
+
+@login_required
+def team_player_manage(request):
+    analyses = AnalysisResult.objects.filter(
+        match__uploaded_by=request.user
+    ).order_by('-created_at')
+
+    return render(request, 'analyzer/team_player_manage.html', {
+        'analyses': analyses,
+    })
+
+
+@login_required
+def edit_team_players(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+    analysis = get_object_or_404(AnalysisResult, match=match)
+    players = analysis.players.all()
+
+    if request.method == 'POST':
+        for player in players:
+            player.player_name = request.POST.get(
+                f'player_name_{player.id}',
+                player.player_name
+            )
+            player.team_name = request.POST.get(
+                f'team_name_{player.id}',
+                player.team_name
+            )
+            player.save()
+
+        return redirect('team_player_manage')
+
+    return render(request, 'analyzer/team_player_edit.html', {
+        'match': match,
+        'analysis': analysis,
+        'players': players,
+    })

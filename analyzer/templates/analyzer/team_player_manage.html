@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}팀/선수 관리 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>팀/선수 관리</h2>
+    <p>
+        분석 리포트에 표시되는 팀 이름과 선수 이름을 관리하는 페이지입니다.
+    </p>
+</div>
+
+{% if analyses %}
+    {% for analysis in analyses %}
+        <div class="card">
+            <h3>{{ analysis.match.title }}</h3>
+
+            <p><strong>분석 상태:</strong> {{ analysis.match.get_status_display }}</p>
+            <p><strong>리포트 생성 시간:</strong> {{ analysis.created_at }}</p>
+            <p><strong>Team A 점유율:</strong> {{ analysis.possession_team_a }}%</p>
+            <p><strong>Team B 점유율:</strong> {{ analysis.possession_team_b }}%</p>
+
+            <h4>현재 선수 목록</h4>
+
+            <table border="1" cellpadding="10">
+                <tr>
+                    <th>선수 이름</th>
+                    <th>팀 이름</th>
+                    <th>이동 거리</th>
+                    <th>평균 속도</th>
+                </tr>
+
+                {% for player in analysis.players.all %}
+                    <tr>
+                        <td>{{ player.player_name }}</td>
+                        <td>{{ player.team_name }}</td>
+                        <td>{{ player.distance }} km</td>
+                        <td>{{ player.speed }} km/h</td>
+                    </tr>
+                {% endfor %}
+            </table>
+
+            <br>
+
+            <a class="button" href="{% url 'edit_team_players' analysis.match.id %}">
+                팀/선수 이름 수정
+            </a>
+            <a class="button" href="{% url 'analysis_report' analysis.match.id %}">
+                리포트 보기
+            </a>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <h3>관리할 팀/선수 정보가 없습니다.</h3>
+        <p>
+            팀/선수 정보는 분석 리포트가 생성된 후 관리할 수 있습니다.
+        </p>
+        <p>
+            먼저 영상 분석 페이지에서 분석 요청 후 더미 분석 리포트를 생성해 주세요.
+        </p>
+
+        <a class="button" href="{% url 'match_list' %}">영상 분석 페이지로 이동</a>
+    </div>
+{% endif %}
+{% endblock %}

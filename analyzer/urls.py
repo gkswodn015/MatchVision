@@ -36,4 +36,11 @@ urlpatterns = [
     path('manage/', views.match_manage, name='match_manage'),
     path('manage/<int:match_id>/edit/', views.edit_match, name='edit_match'),
     path('manage/<int:match_id>/delete/', views.delete_match, name='delete_match'),
+
+    path('teams-players/', views.team_player_manage, name='team_player_manage'),
+    path(
+        'teams-players/<int:match_id>/edit/',
+        views.edit_team_players,
+        name='edit_team_players'
+    ),
 ]

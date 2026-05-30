@@ -79,6 +79,7 @@
 </div>
 
 <div class="card">
+    <a class="button" href="{% url 'edit_team_players' match.id %}">팀/선수 이름 수정</a>
     <a class="button" href="{% url 'match_detail' match.id %}">경기 상세로 돌아가기</a>
     <a class="button" href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>
     <a class="button" href="{% url 'match_manage' %}">경기 관리로 돌아가기</a>
