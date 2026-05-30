@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}분석 요청 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>영상 분석 요청</h2>
+    <p>선택한 경기 영상에 대해 분석을 요청합니다.</p>
+</div>
+
+<div class="card">
+    <h3>{{ match.title }}</h3>
+
+    <p><strong>현재 분석 상태:</strong> {{ match.get_status_display }}</p>
+    <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
+    <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+    <video width="600" controls>
+        <source src="{{ match.video.url }}">
+        브라우저에서 영상을 재생할 수 없습니다.
+    </video>
+
+    <hr>
+
+    {% if match.status == 'uploaded' %}
+        <p>
+            아래 버튼을 누르면 해당 영상에 대한 분석 요청이 실행되고,
+            웹 기능 확인을 위한 더미 분석 결과가 자동으로 생성됩니다.
+        </p>
+
+        <form method="post">
+            {% csrf_token %}
+            <button class="button" type="submit">분석 요청 및 리포트 생성</button>
+        </form>
+    {% elif match.status == 'analyzing' %}
+        <p>이미 분석 요청이 진행 중인 영상입니다.</p>
+        <form method="post" action="{% url 'generate_report' match.id %}">
+            {% csrf_token %}
+            <button class="button" type="submit">더미 분석 리포트 생성</button>
+        </form>
+    {% else %}
+        <p>이미 분석이 완료된 영상입니다.</p>
+        <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <a href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>
+</div>
+{% endblock %}

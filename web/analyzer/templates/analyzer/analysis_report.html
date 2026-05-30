@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}분석 리포트 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>리포트 페이지</h2>
+    <p>분석 내용을 바탕으로 선수 속도, 이동 거리, 점유율, 히트맵, 탑뷰, 경기 정보를 확인합니다.</p>
+</div>
+
+<div class="card">
+    <h3>{{ match.title }} - {{ match.video_name }}</h3>
+
+    <p><strong>분석 상태:</strong> {{ match.get_status_display }}</p>
+    <p><strong>리포트 저장 여부:</strong> {% if analysis.is_saved %}저장 완료{% else %}미저장{% endif %}</p>
+    <p><strong>리포트 생성 시간:</strong> {{ analysis.created_at }}</p>
+    <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+</div>
+
+{% if report_settings.show_tracking %}
+<div class="card">
+    <h3>팀 점유율</h3>
+    <p><strong>Home:</strong> {{ analysis.possession_team_a }}%</p>
+    <p><strong>Away:</strong> {{ analysis.possession_team_b }}%</p>
+</div>
+{% endif %}
+
+{% if report_settings.show_speed %}
+<div class="card">
+    <h3>선수별 스테이터스</h3>
+
+    <table>
+        <tr>
+            <th>선수 이름</th>
+            <th>팀 이름</th>
+            <th>총 이동거리</th>
+            <th>평균 속도</th>
+            <th>최고 속도</th>
+        </tr>
+
+        {% for player in players %}
+        <tr>
+            <td>{{ player.player_name }}</td>
+            <td>{{ player.team_name }}</td>
+            <td>{{ player.distance }} km</td>
+            <td>{{ player.speed }} km/h</td>
+            <td>{{ player.max_speed }} km/h</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5">선수별 분석 결과가 없습니다.</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if report_settings.show_path %}
+<div class="card">
+    <h3>이동 경로 시각화</h3>
+    <p>선수 및 공의 이동 경로를 폴리라인 형태로 표시하는 영역입니다.</p>
+
+    <div style="height: 260px; border: 2px dashed #999; display:flex; align-items:center; justify-content:center;">
+        선수 및 공 이동 경로 폴리라인 표시 영역
+    </div>
+</div>
+{% endif %}
+
+{% if report_settings.show_topview %}
+<div class="card">
+    <h3>탑뷰 / 히트맵 캔버스</h3>
+    <p>탑뷰 기반 위치 추적과 히트맵을 표시하는 영역입니다.</p>
+    <p><strong>히트맵 투명도:</strong> {{ report_settings.heatmap_opacity }}%</p>
+    <p><strong>트래킹 오버레이:</strong> {% if report_settings.tracking_overlay %}표시{% else %}숨김{% endif %}</p>
+
+    <div style="height: 300px; border: 2px dashed #999; display:flex; align-items:center; justify-content:center;">
+        탑뷰 캔버스 + 히트맵 표시 영역
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>경기 정보 URL 입력</h3>
+    <p>경기 결과 페이지 URL을 입력하면 스코어, 득점 기록, 라인업, 팀 통계 영역에 반영됩니다.</p>
+
+    <form method="post" action="{% url 'update_report_info' match.id %}">
+        {% csrf_token %}
+        <input
+            type="url"
+            name="match_info_url"
+            value="{{ analysis.match_info_url }}"
+            placeholder="경기 정보 URL 입력"
+            style="width: 70%; padding: 10px;"
+        >
+        <button class="button" type="submit">불러오기</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>경기 정보</h3>
+
+    <p><strong>스코어:</strong> {{ analysis.score_info|default:'경기 정보 URL 입력 후 표시됩니다.' }}</p>
+
+    <h4>득점 기록</h4>
+    <pre>{{ analysis.goal_records|default:'득점 기록 정보가 없습니다.' }}</pre>
+
+    <h4>라인업</h4>
+    <pre>{{ analysis.lineup_info|default:'라인업 정보가 없습니다.' }}</pre>
+
+    <h4>팀 통계</h4>
+    <pre>{{ analysis.team_stats|default:'팀 통계 정보가 없습니다.' }}</pre>
+</div>
+
+{% if report_settings.show_summary %}
+<div class="card">
+    <h3>리포트 요약</h3>
+    <p>{{ analysis.report_text }}</p>
+</div>
+{% endif %}
+
+<div class="card">
+    <form method="post" action="{% url 'save_report' match.id %}" style="display:inline;">
+        {% csrf_token %}
+        <button class="button" type="submit">리포트 저장</button>
+    </form>
+
+    <a class="button" href="{% url 'edit_team_players' match.id %}">팀/선수 이름 수정</a>
+    <a class="button" href="{% url 'settings_page' %}">리포트 설정 변경</a>
+    <a class="button" href="{% url 'video_analysis' match.id %}">영상 분석 화면</a>
+    <a class="button" href="{% url 'match_detail' match.id %}">경기 상세로 돌아가기</a>
+    <a class="button" href="{% url 'match_list' %}">영상 분석 목록으로 돌아가기</a>
+    <a class="button" href="{% url 'match_manage' %}">경기 관리로 돌아가기</a>
+</div>
+
+{% endblock %}

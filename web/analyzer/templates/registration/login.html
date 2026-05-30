@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}로그인 | Football Analyzer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>로그인</h2>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="button" type="submit">로그인</button>
+    </form>
+
+    <hr>
+
+    <p>계정이 없으신가요?</p>
+    <a href="{% url 'signup' %}">회원가입</a>
+</div>
+{% endblock %}
