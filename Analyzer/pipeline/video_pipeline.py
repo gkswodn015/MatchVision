@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import numpy as np
 
@@ -37,7 +39,34 @@ class VideoPipeline:
 
         h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_size = (w, h)
         self.display_scale = min(1280 / w, 720 / h)
+
+        self.result_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "result")
+        os.makedirs(self.result_dir, exist_ok=True)
+
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        self.detected_path = os.path.join(self.result_dir, f"{video_name}_detected.mp4")
+        self.topview_path = os.path.join(self.result_dir, f"{video_name}_topview.mp4")
+
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        self.detected_writer = cv2.VideoWriter(
+            self.detected_path,
+            fourcc,
+            self.fps,
+            self.frame_size,
+        )
+        self.topview_writer = cv2.VideoWriter(
+            self.topview_path,
+            fourcc,
+            self.fps,
+            (CANVAS_W, CANVAS_H),
+        )
+
+        if not self.detected_writer.isOpened():
+            raise RuntimeError(f"Failed to create output video: {self.detected_path}")
+        if not self.topview_writer.isOpened():
+            raise RuntimeError(f"Failed to create output video: {self.topview_path}")
 
     def run(self):
         print("분석 시작. 'q' 키로 종료.\n")
@@ -77,6 +106,8 @@ class VideoPipeline:
 
             # --- 원본 프레임 ---
             draw_tracks(frame, tracks, speed_stats)
+            self.detected_writer.write(frame)
+            self.topview_writer.write(topview)
 
             # --- 출력 ---
             display = cv2.resize(frame, (
@@ -124,7 +155,12 @@ class VideoPipeline:
 
     def _cleanup(self):
         self.cap.release()
+        self.detected_writer.release()
+        self.topview_writer.release()
         cv2.destroyAllWindows()
+
+        print(f"\nSaved detected video: {self.detected_path}")
+        print(f"Saved topview video:  {self.topview_path}")
 
         ratios = self.possession._ratios()
         if ratios:
