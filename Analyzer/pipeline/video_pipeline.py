@@ -1,0 +1,169 @@
+import os
+
+import cv2
+import numpy as np
+
+from detector.yolo_detector import YoloDetector
+from detector.classifier import TeamClassifier
+from tracker.bytetrack import ByteTracker
+from topview.coordinate_mapper import CoordinateMapper, CANVAS_W, CANVAS_H
+from topview.calibration_set import CalibrationSet
+from topview.field_landmarks import FIELD_W, FIELD_H
+from stats.speed_calculator import SpeedCalculator
+from stats.possession import PossessionTracker
+from visualizer.overlay import draw_tracks, draw_topview_dots
+from visualizer.path_drawer import PathDrawer
+
+
+class VideoPipeline:
+    def __init__(
+        self,
+        video_path: str,
+        calib_set: CalibrationSet,
+        classifier: TeamClassifier | None = None,
+    ):
+        self.cap = cv2.VideoCapture(video_path)
+        if not self.cap.isOpened():
+            raise FileNotFoundError(f"영상을 열 수 없습니다: {video_path}")
+
+        self.fps       = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self.calib_set = calib_set
+        self.coord_mapper = CoordinateMapper(calib_set.get_mapper(0))
+
+        self.detector   = YoloDetector()
+        self.classifier = classifier or TeamClassifier()
+        self.tracker    = ByteTracker()
+        self.speed_calc = SpeedCalculator(fps=self.fps)
+        self.possession = PossessionTracker()
+        self.path_drawer = PathDrawer()
+
+        h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_size = (w, h)
+        self.display_scale = min(1280 / w, 720 / h)
+
+        self.result_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "result")
+        os.makedirs(self.result_dir, exist_ok=True)
+
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        self.detected_path = os.path.join(self.result_dir, f"{video_name}_detected.mp4")
+        self.topview_path = os.path.join(self.result_dir, f"{video_name}_topview.mp4")
+
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        self.detected_writer = cv2.VideoWriter(
+            self.detected_path,
+            fourcc,
+            self.fps,
+            self.frame_size,
+        )
+        self.topview_writer = cv2.VideoWriter(
+            self.topview_path,
+            fourcc,
+            self.fps,
+            (CANVAS_W, CANVAS_H),
+        )
+
+        if not self.detected_writer.isOpened():
+            raise RuntimeError(f"Failed to create output video: {self.detected_path}")
+        if not self.topview_writer.isOpened():
+            raise RuntimeError(f"Failed to create output video: {self.topview_path}")
+
+    def run(self):
+        print("분석 시작. 'q' 키로 종료.\n")
+
+        frame_n = 0
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            frame_n += 1
+
+            # 현재 프레임에 가장 가까운 캘리브레이션으로 교체
+            self.coord_mapper.mapper = self.calib_set.get_mapper(frame_n)
+
+            # --- 탐지 & 추적 ---
+            raw_detections = self.detector.detect(frame)
+            detections = self._filter_inside_field(raw_detections)
+            detections = self.classifier.classify(frame, detections)
+            tracks     = self.tracker.update(detections)
+
+            # --- 좌표 변환 ---
+            positions = []
+            for t in tracks:
+                mx, my = self.coord_mapper.to_meters(t["bbox"])
+                cx, cy = self.coord_mapper.to_canvas(t["bbox"])
+                positions.append({"id": t["id"], "mx": mx, "my": my, "cx": cx, "cy": cy})
+
+            # --- 통계 ---
+            speed_stats = self.speed_calc.update(positions)
+            self.possession.update(tracks, positions)
+
+            # --- 탑뷰 ---
+            topview = self._make_topview_canvas()
+            self.path_drawer.update(positions)
+            self.path_drawer.draw(topview)
+            draw_topview_dots(topview, positions, tracks)
+
+            # --- 원본 프레임 ---
+            draw_tracks(frame, tracks, speed_stats)
+            self.detected_writer.write(frame)
+            self.topview_writer.write(topview)
+
+            # --- 출력 ---
+            display = cv2.resize(frame, (
+                int(frame.shape[1] * self.display_scale),
+                int(frame.shape[0] * self.display_scale),
+            ))
+            cv2.imshow("MatchVision - Original", display)
+            cv2.imshow("MatchVision - TopView",  topview)
+
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+
+        self._cleanup()
+
+    def _make_topview_canvas(self) -> np.ndarray:
+        canvas = np.full((CANVAS_H, CANVAS_W, 3), (34, 139, 34), dtype=np.uint8)
+        cv2.rectangle(canvas, (0, 0), (CANVAS_W - 1, CANVAS_H - 1), (255, 255, 255), 2)
+        half_x = int(52.5 * CANVAS_W / FIELD_W)
+        cv2.line(canvas, (half_x, 0), (half_x, CANVAS_H), (255, 255, 255), 1)
+        r = int(9.15 * CANVAS_W / FIELD_W)
+        cv2.circle(canvas, (half_x, CANVAS_H // 2), r, (255, 255, 255), 1)
+        self._draw_box(canvas,  0.0, 13.84, 16.5, 54.16)
+        self._draw_box(canvas, 88.5, 13.84, 105.0, 54.16)
+        return canvas
+
+    def _draw_box(self, canvas, mx1, my1, mx2, my2):
+        x1 = int(mx1 * CANVAS_W / FIELD_W)
+        y1 = int(my1 * CANVAS_H / FIELD_H)
+        x2 = int(mx2 * CANVAS_W / FIELD_W)
+        y2 = int(my2 * CANVAS_H / FIELD_H)
+        cv2.rectangle(canvas, (x1, y1), (x2, y2), (255, 255, 255), 1)
+
+    def _filter_inside_field(self, detections: list[dict]) -> list[dict]:
+        filtered = []
+        margin = 1.0
+        for det in detections:
+            try:
+                mx, my = self.coord_mapper.to_meters(det["bbox"])
+            except cv2.error:
+                continue
+
+            if -margin <= mx <= FIELD_W + margin and -margin <= my <= FIELD_H + margin:
+                filtered.append(det)
+        return filtered
+
+    def _cleanup(self):
+        self.cap.release()
+        self.detected_writer.release()
+        self.topview_writer.release()
+        cv2.destroyAllWindows()
+
+        print(f"\nSaved detected video: {self.detected_path}")
+        print(f"Saved topview video:  {self.topview_path}")
+
+        ratios = self.possession._ratios()
+        if ratios:
+            print("\n=== 점유율 ===")
+            for tid, ratio in sorted(ratios.items(), key=lambda x: -x[1]):
+                print(f"  ID {tid:3d}: {ratio*100:.1f}%")
