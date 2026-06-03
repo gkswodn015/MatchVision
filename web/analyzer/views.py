@@ -1,3 +1,6 @@
+import threading
+
+from django.db import close_old_connections
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -11,6 +14,7 @@ from .forms import (
     PlayerForm,
 )
 from .models import Match, AnalysisResult, PlayerResult, Team, Player
+from .services.analyzer_runner import AnalyzerRunError, import_analyzer_result_videos, run_analyzer_for_match
 
 
 def main(request):
@@ -141,6 +145,64 @@ def create_dummy_analysis_result(match):
     return analysis
 
 
+def create_analyzer_analysis_result(match):
+    home_name = match.home_team.name if match.home_team else 'Home Team'
+    away_name = match.away_team.name if match.away_team else 'Away Team'
+
+    analysis, _ = AnalysisResult.objects.get_or_create(match=match)
+    analysis.analysis_error = ''
+    analysis.analysis_log = ''
+    analysis.report_text = (
+        'Analyzer/main.py를 실행해 객체 탐지 영상과 탑뷰 변환 영상을 생성했습니다. '
+        '분석 과정은 기존 Analyzer의 OpenCV 창과 로그를 그대로 사용합니다.'
+    )
+    analysis.score_info = f'{home_name} vs {away_name}'
+
+    def append_log(message: str) -> None:
+        AnalysisResult.objects.filter(id=analysis.id).update(
+            analysis_log=analysis.analysis_log + message + '\n'
+        )
+        analysis.analysis_log += message + '\n'
+
+    result = run_analyzer_for_match(match, log_callback=append_log)
+    analysis.detected_video.name = result.detected_video_name
+    analysis.topview_video.name = result.topview_video_name
+    analysis.save()
+
+    match.status = 'completed'
+    match.save()
+
+    return analysis
+
+
+def start_analysis_job(match_id: int) -> None:
+    thread = threading.Thread(
+        target=_run_analysis_job,
+        args=(match_id,),
+        daemon=True,
+    )
+    thread.start()
+
+
+def _run_analysis_job(match_id: int) -> None:
+    close_old_connections()
+    try:
+        match = Match.objects.select_related('home_team', 'away_team').get(id=match_id)
+        create_analyzer_analysis_result(match)
+    except Exception as exc:
+        try:
+            match = Match.objects.get(id=match_id)
+            analysis, _ = AnalysisResult.objects.get_or_create(match=match)
+            analysis.analysis_error = str(exc)
+            analysis.report_text = 'Analyzer 실행 중 오류가 발생했습니다.'
+            analysis.save()
+
+            match.status = 'failed'
+            match.save(update_fields=['status'])
+        finally:
+            close_old_connections()
+
+
 @login_required
 def request_analysis(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
@@ -164,8 +226,9 @@ def request_analysis(request, match_id):
         match.status = 'analyzing'
         match.save()
 
-        create_dummy_analysis_result(match)
-        return redirect('analysis_report', match_id=match.id)
+        start_analysis_job(match.id)
+        messages.info(request, '분석 요청이 접수되었습니다. 완료되면 리포트에서 결과 영상을 확인할 수 있습니다.')
+        return redirect('analysis_status', match_id=match.id)
 
     return render(request, 'analyzer/analysis_request.html', {'match': match})
 
@@ -173,7 +236,11 @@ def request_analysis(request, match_id):
 @login_required
 def analysis_status(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
-    return render(request, 'analyzer/analysis_status.html', {'match': match})
+    analysis = AnalysisResult.objects.filter(match=match).first()
+    return render(request, 'analyzer/analysis_status.html', {
+        'match': match,
+        'analysis': analysis,
+    })
 
 
 @login_required
@@ -181,8 +248,12 @@ def generate_report(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
 
     if request.method == 'POST':
-        create_dummy_analysis_result(match)
-        return redirect('analysis_report', match_id=match.id)
+        match.status = 'analyzing'
+        match.save()
+
+        start_analysis_job(match.id)
+        messages.info(request, '분석 요청이 접수되었습니다.')
+        return redirect('analysis_status', match_id=match.id)
 
     return redirect('analysis_status', match_id=match.id)
 
@@ -191,6 +262,7 @@ def generate_report(request, match_id):
 def analysis_report(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
     analysis = get_object_or_404(AnalysisResult, match=match)
+    _sync_analysis_videos(match, analysis)
     players = analysis.players.all()
 
     report_settings = request.session.get('report_settings', {
@@ -208,6 +280,26 @@ def analysis_report(request, match_id):
         'players': players,
         'report_settings': report_settings,
     })
+
+
+def _sync_analysis_videos(match, analysis) -> None:
+    needs_sync = not analysis.detected_video or not analysis.topview_video
+    if analysis.detected_video and not analysis.detected_video.storage.exists(analysis.detected_video.name):
+        needs_sync = True
+    if analysis.topview_video and not analysis.topview_video.storage.exists(analysis.topview_video.name):
+        needs_sync = True
+
+    if not needs_sync:
+        return
+
+    try:
+        result = import_analyzer_result_videos(match)
+    except AnalyzerRunError:
+        return
+
+    analysis.detected_video.name = result.detected_video_name
+    analysis.topview_video.name = result.topview_video_name
+    analysis.save(update_fields=['detected_video', 'topview_video'])
 
 
 @login_required

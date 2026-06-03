@@ -21,6 +21,8 @@ class VideoPipeline:
         video_path: str,
         calib_set: CalibrationSet,
         classifier: TeamClassifier | None = None,
+        display: bool = True,
+        result_dir: str | None = None,
     ):
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
@@ -29,6 +31,7 @@ class VideoPipeline:
         self.fps       = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
         self.calib_set = calib_set
         self.coord_mapper = CoordinateMapper(calib_set.get_mapper(0))
+        self.display = display
 
         self.detector   = YoloDetector()
         self.classifier = classifier or TeamClassifier()
@@ -42,7 +45,10 @@ class VideoPipeline:
         self.frame_size = (w, h)
         self.display_scale = min(1280 / w, 720 / h)
 
-        self.result_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "result")
+        self.result_dir = result_dir or os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "result",
+        )
         os.makedirs(self.result_dir, exist_ok=True)
 
         video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -109,18 +115,22 @@ class VideoPipeline:
             self.detected_writer.write(frame)
             self.topview_writer.write(topview)
 
-            # --- 출력 ---
-            display = cv2.resize(frame, (
-                int(frame.shape[1] * self.display_scale),
-                int(frame.shape[0] * self.display_scale),
-            ))
-            cv2.imshow("MatchVision - Original", display)
-            cv2.imshow("MatchVision - TopView",  topview)
+            if self.display:
+                display = cv2.resize(frame, (
+                    int(frame.shape[1] * self.display_scale),
+                    int(frame.shape[0] * self.display_scale),
+                ))
+                cv2.imshow("MatchVision - Original", display)
+                cv2.imshow("MatchVision - TopView",  topview)
 
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
 
         self._cleanup()
+        return {
+            "detected_path": self.detected_path,
+            "topview_path": self.topview_path,
+        }
 
     def _make_topview_canvas(self) -> np.ndarray:
         canvas = np.full((CANVAS_H, CANVAS_W, 3), (34, 139, 34), dtype=np.uint8)
@@ -157,7 +167,8 @@ class VideoPipeline:
         self.cap.release()
         self.detected_writer.release()
         self.topview_writer.release()
-        cv2.destroyAllWindows()
+        if self.display:
+            cv2.destroyAllWindows()
 
         print(f"\nSaved detected video: {self.detected_path}")
         print(f"Saved topview video:  {self.topview_path}")

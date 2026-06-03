@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ultralytics import YOLO
 
 
@@ -13,7 +15,7 @@ class YoloDetector:
         tile_size: int = 1280,
         tile_overlap: float = 0.2,
     ):
-        self.model = YOLO(model_path)
+        self.model = YOLO(_resolve_model_path(model_path))
         self.conf = conf
         self.imgsz = imgsz
         self.tile = tile
@@ -92,3 +94,16 @@ def _nms(dets: list[dict], iou_thr: float = 0.45) -> list[dict]:
         if not any(_iou(d["bbox"], k["bbox"]) > iou_thr for k in kept):
             kept.append(d)
     return kept
+
+
+def _resolve_model_path(model_path: str) -> str:
+    path = Path(model_path)
+    if path.is_absolute():
+        return str(path)
+
+    analyzer_dir = Path(__file__).resolve().parents[1]
+    local_path = analyzer_dir / path
+    if local_path.exists():
+        return str(local_path)
+
+    return model_path

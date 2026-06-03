@@ -3,6 +3,10 @@
 {% block title %}분석 상태 | Football Analyzer{% endblock %}
 
 {% block content %}
+{% if match.status == 'analyzing' %}
+<meta http-equiv="refresh" content="5">
+{% endif %}
+
 <div class="card">
     <h2>분석 상태 확인</h2>
     <p>요청한 경기 영상의 분석 진행 상태를 확인합니다.</p>
@@ -21,20 +25,30 @@
 
     {% elif match.status == 'analyzing' %}
         <p>
-            분석 요청이 접수된 영상입니다.
-            현재 단계에서는 실제 YOLO/OpenCV 결과 대신 더미 분석 결과를 생성합니다.
+            Analyzer/main.py가 실행 중입니다.
+            별도로 열린 OpenCV 창에서 기존 Analyzer와 동일하게 조작하세요.
+            이 페이지는 5초마다 자동으로 새로고침됩니다.
         </p>
-
-        <form method="post" action="{% url 'generate_report' match.id %}">
-            {% csrf_token %}
-            <button class="button" type="submit">더미 분석 리포트 생성</button>
-        </form>
 
     {% elif match.status == 'completed' %}
         <p>분석이 완료된 영상입니다.</p>
         <a class="button" href="{% url 'analysis_report' match.id %}">분석 리포트 보기</a>
+
+    {% elif match.status == 'failed' %}
+        <p>분석 중 오류가 발생했습니다.</p>
+        {% if analysis.analysis_error %}
+            <p style="color:#b00020;"><strong>오류:</strong> {{ analysis.analysis_error }}</p>
+        {% endif %}
+        <a class="button" href="{% url 'video_analysis' match.id %}">캘리브레이션 다시 하기</a>
     {% endif %}
 </div>
+
+{% if analysis and analysis.analysis_log %}
+<div class="card">
+    <h3>Analyzer 실행 로그</h3>
+    <pre style="max-height: 420px; overflow:auto; background:#111; color:#e5e5e5; padding:16px; white-space:pre-wrap;">{{ analysis.analysis_log }}</pre>
+</div>
+{% endif %}
 
 <div class="card">
     <a class="button" href="{% url 'match_list' %}">영상 목록으로 돌아가기</a>

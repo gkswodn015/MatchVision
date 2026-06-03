@@ -15,7 +15,30 @@
     <p><strong>리포트 저장 여부:</strong> {% if analysis.is_saved %}저장 완료{% else %}미저장{% endif %}</p>
     <p><strong>리포트 생성 시간:</strong> {{ analysis.created_at }}</p>
     <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
+
+    {% if analysis.analysis_error %}
+    <p style="color:#b00020;"><strong>분석 오류:</strong> {{ analysis.analysis_error }}</p>
+    {% endif %}
 </div>
+
+{% if analysis.detected_video %}
+<div class="card">
+    <h3>객체 탐지 결과 영상</h3>
+    <video controls style="width: 100%; max-height: 520px;">
+        <source src="{{ analysis.detected_video.url }}">
+        브라우저에서 이 영상을 바로 재생할 수 없습니다.
+    </video>
+    <p>
+        <a class="button" href="{{ analysis.detected_video.url }}" target="_blank">새 탭에서 열기</a>
+        <a class="button" href="{{ analysis.detected_video.url }}" download>다운로드</a>
+    </p>
+</div>
+{% else %}
+<div class="card">
+    <h3>객체 탐지 결과 영상</h3>
+    <p>연결된 객체 탐지 결과 영상이 없습니다. Analyzer/result 폴더의 결과 파일을 확인하세요.</p>
+</div>
+{% endif %}
 
 {% if report_settings.show_tracking %}
 <div class="card">
@@ -69,13 +92,23 @@
 {% if report_settings.show_topview %}
 <div class="card">
     <h3>탑뷰 / 히트맵 캔버스</h3>
-    <p>탑뷰 기반 위치 추적과 히트맵을 표시하는 영역입니다.</p>
     <p><strong>히트맵 투명도:</strong> {{ report_settings.heatmap_opacity }}%</p>
     <p><strong>트래킹 오버레이:</strong> {% if report_settings.tracking_overlay %}표시{% else %}숨김{% endif %}</p>
 
+    {% if analysis.topview_video %}
+    <video controls style="width: 100%; max-height: 520px;">
+        <source src="{{ analysis.topview_video.url }}">
+        브라우저에서 이 영상을 바로 재생할 수 없습니다.
+    </video>
+    <p>
+        <a class="button" href="{{ analysis.topview_video.url }}" target="_blank">새 탭에서 열기</a>
+        <a class="button" href="{{ analysis.topview_video.url }}" download>다운로드</a>
+    </p>
+    {% else %}
     <div style="height: 300px; border: 2px dashed #999; display:flex; align-items:center; justify-content:center;">
-        탑뷰 캔버스 + 히트맵 표시 영역
+        탑뷰 결과 영상이 아직 없습니다.
     </div>
+    {% endif %}
 </div>
 {% endif %}
 
