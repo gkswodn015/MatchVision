@@ -3,6 +3,8 @@ from topview.field_landmarks import FIELD_W, FIELD_H
 
 CANVAS_W = 640
 CANVAS_H = 420
+CANVAS_PAD_X = 18
+CANVAS_PAD_Y = 18
 
 
 class CoordinateMapper:
@@ -21,6 +23,8 @@ class CoordinateMapper:
 
     def to_canvas(self, bbox: list[int]) -> tuple[int, int]:
         mx, my = self.to_meters(bbox)
-        cx = int(mx * CANVAS_W / FIELD_W)
-        cy = int(my * CANVAS_H / FIELD_H)
+        pitch_w = CANVAS_W - CANVAS_PAD_X * 2
+        pitch_h = CANVAS_H - CANVAS_PAD_Y * 2
+        cx = int(CANVAS_PAD_X + mx * pitch_w / FIELD_W)
+        cy = int(CANVAS_PAD_Y + my * pitch_h / FIELD_H)
         return cx, cy
