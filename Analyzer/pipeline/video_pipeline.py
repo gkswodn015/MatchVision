@@ -101,6 +101,8 @@ class VideoPipeline:
                 cx, cy = self.coord_mapper.to_canvas(t["bbox"])
                 positions.append({"id": t["id"], "mx": mx, "my": my, "cx": cx, "cy": cy})
 
+            tracks, positions = self._apply_roster_constraints(tracks, positions)
+
             speed_stats = self.speed_calc.update(positions)
             self.possession.update(tracks, positions)
 
@@ -197,6 +199,171 @@ class VideoPipeline:
             if -margin <= mx <= FIELD_W + margin and -margin <= my <= FIELD_H + margin:
                 filtered.append(det)
         return filtered
+
+    def _apply_roster_constraints(
+        self,
+        tracks: list[dict],
+        positions: list[dict],
+    ) -> tuple[list[dict], list[dict]]:
+        pos_map = {p["id"]: p for p in positions}
+        ball_tracks = [t for t in tracks if t.get("class") == "sports ball"]
+        person_tracks = [
+            t for t in tracks
+            if t.get("class") == "person" and t["id"] in pos_map
+        ]
+
+        person_tracks = sorted(
+            person_tracks,
+            key=lambda t: (
+                bool(t.get("predicted", False)),
+                int(t.get("lost", 0)),
+                -int(t.get("hits", 0)),
+            ),
+        )[:25]
+
+        self._assign_goalkeepers(person_tracks, pos_map)
+        self._limit_referee_count(person_tracks, pos_map)
+        self._balance_team_counts(person_tracks)
+
+        kept_ids = {t["id"] for t in person_tracks + ball_tracks}
+        filtered_positions = [p for p in positions if p["id"] in kept_ids]
+        return person_tracks + ball_tracks, filtered_positions
+
+    def _assign_goalkeepers(self, person_tracks: list[dict], pos_map: dict[int, dict]) -> None:
+        left_keeper = self._select_goalkeeper(person_tracks, pos_map, side="left")
+        right_keeper = self._select_goalkeeper(
+            person_tracks,
+            pos_map,
+            side="right",
+            exclude_id=left_keeper["id"] if left_keeper else None,
+        )
+
+        if left_keeper is not None:
+            left_keeper["role"] = "goalkeeper_left"
+        if right_keeper is not None:
+            right_keeper["role"] = "goalkeeper_right"
+
+    def _select_goalkeeper(
+        self,
+        person_tracks: list[dict],
+        pos_map: dict[int, dict],
+        side: str,
+        exclude_id: int | None = None,
+    ) -> dict | None:
+        goal_x = 0.0 if side == "left" else FIELD_W
+        penalty_min_x, penalty_max_x = (
+            (0.0, 16.5) if side == "left" else (88.5, FIELD_W)
+        )
+
+        candidates = [
+            t for t in person_tracks
+            if t["id"] != exclude_id
+            and t["id"] in pos_map
+            and self._inside_penalty_box(pos_map[t["id"]], penalty_min_x, penalty_max_x)
+        ]
+        if not candidates:
+            return None
+
+        return min(
+            candidates,
+            key=lambda t: (
+                self._goal_distance(pos_map[t["id"]], goal_x),
+                int(t.get("lost", 0)),
+                -int(t.get("hits", 0)),
+            ),
+        )
+
+    @staticmethod
+    def _inside_penalty_box(pos: dict, min_x: float, max_x: float) -> bool:
+        return min_x <= pos["mx"] <= max_x and 13.84 <= pos["my"] <= 54.16
+
+    @staticmethod
+    def _goal_distance(pos: dict, goal_x: float) -> float:
+        return ((pos["mx"] - goal_x) ** 2 + (pos["my"] - 34.0) ** 2) ** 0.5
+
+    def _limit_referee_count(self, person_tracks: list[dict], pos_map: dict[int, dict]) -> None:
+        referees = [t for t in person_tracks if t.get("role") == "referee"]
+        if len(referees) <= 1:
+            return
+
+        main_ref = max(
+            referees,
+            key=lambda t: (
+                not self._near_field_boundary(pos_map.get(t["id"])),
+                self._role_vote(t, "referee"),
+                int(t.get("hits", 0)),
+                -int(t.get("lost", 0)),
+            ),
+        )
+
+        allowed_refs = {main_ref["id"]}
+        boundary_refs = [
+            t for t in referees
+            if t["id"] != main_ref["id"] and self._near_field_boundary(pos_map.get(t["id"]))
+        ]
+        boundary_refs = sorted(
+            boundary_refs,
+            key=lambda t: (
+                self._role_vote(t, "referee"),
+                int(t.get("hits", 0)),
+                -int(t.get("lost", 0)),
+            ),
+            reverse=True,
+        )[:2]
+        allowed_refs.update(t["id"] for t in boundary_refs)
+
+        for track in referees:
+            if track["id"] in allowed_refs:
+                continue
+            track["role"] = self._best_team_role(track)
+
+    def _balance_team_counts(self, person_tracks: list[dict]) -> None:
+        for role in ("our_team", "opponent"):
+            team = [t for t in person_tracks if t.get("role") == role]
+            if len(team) <= 10:
+                continue
+
+            other = "opponent" if role == "our_team" else "our_team"
+            other_count = sum(1 for t in person_tracks if t.get("role") == other)
+            overflow = sorted(
+                team,
+                key=lambda t: (
+                    self._role_vote(t, role),
+                    int(t.get("hits", 0)),
+                    -int(t.get("lost", 0)),
+                ),
+            )[:len(team) - 10]
+
+            for track in overflow:
+                if other_count < 10:
+                    track["role"] = other
+                    other_count += 1
+                else:
+                    track["role"] = "unknown"
+
+    @staticmethod
+    def _role_vote(track: dict, role: str) -> int:
+        return int(track.get("role_votes", {}).get(role, 0))
+
+    def _best_team_role(self, track: dict) -> str:
+        our_votes = self._role_vote(track, "our_team")
+        opponent_votes = self._role_vote(track, "opponent")
+        if our_votes > opponent_votes:
+            return "our_team"
+        if opponent_votes > our_votes:
+            return "opponent"
+        return "our_team"
+
+    @staticmethod
+    def _near_field_boundary(pos: dict | None, margin: float = 3.0) -> bool:
+        if pos is None:
+            return False
+        return (
+            pos["mx"] <= margin
+            or pos["mx"] >= FIELD_W - margin
+            or pos["my"] <= margin
+            or pos["my"] >= FIELD_H - margin
+        )
 
     def _cleanup(self):
         self.cap.release()

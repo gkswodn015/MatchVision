@@ -5,6 +5,8 @@ import numpy as np
 ROLE_COLORS = {
     "our_team": (210, 35, 245),
     "opponent": (245, 155, 20),
+    "goalkeeper_left": (40, 255, 120),
+    "goalkeeper_right": (40, 255, 120),
     "referee": (35, 210, 255),
     "sports ball": (245, 245, 245),
     "unknown": (190, 190, 190),
@@ -48,7 +50,7 @@ def draw_tracks(frame, tracks: list[dict], speed_stats: dict[int, dict]):
 
 
 def draw_topview_dots(canvas, positions: list[dict], tracks: list[dict]):
-    """Draw clean player/ball dots on the top-view canvas."""
+    """Draw clean player/ball dots and matching player ID tags on the top-view canvas."""
     track_map = {t["id"]: t for t in tracks}
 
     for pos in positions:
@@ -63,6 +65,9 @@ def draw_topview_dots(canvas, positions: list[dict], tracks: list[dict]):
         cv2.circle(canvas, (cx, cy), radius + 2, (20, 30, 20), -1, cv2.LINE_AA)
         cv2.circle(canvas, (cx, cy), radius, color, -1, cv2.LINE_AA)
         cv2.circle(canvas, (cx, cy), radius, (8, 24, 12), 2, cv2.LINE_AA)
+
+        if not is_ball:
+            _draw_topview_label(canvas, f'#{pos["id"]}', cx, cy - radius - 6, color)
 
 
 def _draw_label(frame, text: str, cx: int, y: int, color: tuple[int, int, int]) -> None:
@@ -85,6 +90,38 @@ def _draw_label(frame, text: str, cx: int, y: int, color: tuple[int, int, int]) 
         font,
         scale,
         (22, 22, 24),
+        thickness,
+        cv2.LINE_AA,
+    )
+
+
+def _draw_topview_label(
+    canvas,
+    text: str,
+    cx: int,
+    y: int,
+    color: tuple[int, int, int],
+) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.42
+    thickness = 1
+    (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
+    pad_x, pad_y = 5, 3
+
+    x1 = max(0, min(canvas.shape[1] - tw - pad_x * 2, cx - tw // 2 - pad_x))
+    y1 = max(0, min(canvas.shape[0] - th - baseline - pad_y * 2, y - th - pad_y))
+    x2 = x1 + tw + pad_x * 2
+    y2 = y1 + th + baseline + pad_y * 2
+
+    cv2.rectangle(canvas, (x1, y1), (x2, y2), (18, 24, 18), -1, cv2.LINE_AA)
+    cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 1, cv2.LINE_AA)
+    cv2.putText(
+        canvas,
+        text,
+        (x1 + pad_x, y2 - baseline - pad_y),
+        font,
+        scale,
+        (245, 245, 245),
         thickness,
         cv2.LINE_AA,
     )

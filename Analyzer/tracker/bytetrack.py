@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from scipy.optimize import linear_sum_assignment
+from collections import Counter, deque
 
 
 def _bbox_to_z(bbox: list) -> np.ndarray:
@@ -65,12 +66,14 @@ class ByteTracker:
     def __init__(
         self,
         max_lost: int = 90,
+        visible_lost: int = 18,
         match_threshold: float = 0.34,
         min_iou: float = 0.02,
     ):
         self._next_id = 1
         self._tracks: dict[int, dict] = {}
         self.max_lost = max_lost
+        self.visible_lost = visible_lost
         self.match_threshold = match_threshold
         self.min_iou = min_iou
 
@@ -180,6 +183,7 @@ class ByteTracker:
             "bbox": det["bbox"],
             "class": det["class"],
             "role": det.get("role", det["class"]),
+            "role_votes": deque([det.get("role", det["class"])], maxlen=18),
             "appearance": self._copy_appearance(det.get("appearance")),
             "lost": 0,
             "hits": 1,
@@ -191,7 +195,9 @@ class ByteTracker:
         track = self._tracks[tid]
         track["bbox"] = track["kf"].correct(det["bbox"])
         track["class"] = det["class"]
-        track["role"] = det.get("role", det["class"])
+        det_role = det.get("role", det["class"])
+        track["role_votes"].append(det_role)
+        track["role"] = self._stable_role(track)
         track["lost"] = 0
         track["hits"] += 1
 
@@ -221,10 +227,24 @@ class ByteTracker:
                 "bbox": track["bbox"],
                 "class": track["class"],
                 "role": track.get("role", track["class"]),
+                "role_votes": dict(Counter(track.get("role_votes", []))),
+                "lost": track.get("lost", 0),
+                "hits": track.get("hits", 0),
+                "predicted": track.get("lost", 0) > 0,
             }
             for tid, track in self._tracks.items()
-            if track["lost"] == 0
+            if track["lost"] <= self.visible_lost
         ]
+
+    @staticmethod
+    def _stable_role(track: dict) -> str:
+        votes = [
+            role for role in track.get("role_votes", [])
+            if role and role != "unknown"
+        ]
+        if not votes:
+            return track.get("role", track.get("class", "unknown"))
+        return Counter(votes).most_common(1)[0][0]
 
     @staticmethod
     def _copy_appearance(value):
