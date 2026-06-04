@@ -3,13 +3,13 @@ from topview.homography import HomographyMapper
 
 class CalibrationSet:
     """
-    여러 프레임 위치에서 보정된 HomographyMapper 컬렉션.
-    get_mapper(frame_idx) 는 프레임 번호 기준 가장 가까운 보정값을 반환한다.
+    Collection of calibrated HomographyMapper instances at different frame positions.
+    get_mapper(frame_idx) returns the calibration closest to the requested frame.
     """
 
     def __init__(self, calibrations: list[tuple[int, HomographyMapper]]):
         if not calibrations:
-            raise ValueError("캘리브레이션이 하나 이상 필요합니다.")
+            raise ValueError("At least one calibration is required.")
         self._items: list[tuple[int, HomographyMapper]] = sorted(
             calibrations, key=lambda x: x[0]
         )

@@ -26,16 +26,16 @@ class VideoPipeline:
     ):
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
-            raise FileNotFoundError(f"영상을 열 수 없습니다: {video_path}")
+            raise FileNotFoundError(f"Could not open video: {video_path}")
 
-        self.fps       = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
         self.calib_set = calib_set
         self.coord_mapper = CoordinateMapper(calib_set.get_mapper(0))
         self.display = display
 
-        self.detector   = YoloDetector()
+        self.detector = YoloDetector()
         self.classifier = classifier or TeamClassifier()
-        self.tracker    = ByteTracker()
+        self.tracker = ByteTracker()
         self.speed_calc = SpeedCalculator(fps=self.fps)
         self.possession = PossessionTracker()
         self.path_drawer = PathDrawer()
@@ -75,7 +75,7 @@ class VideoPipeline:
             raise RuntimeError(f"Failed to create output video: {self.topview_path}")
 
     def run(self):
-        print("분석 시작. 'q' 키로 종료.\n")
+        print("Analysis started. Press 'q' to stop.\n")
 
         frame_n = 0
         while True:
@@ -84,33 +84,27 @@ class VideoPipeline:
                 break
             frame_n += 1
 
-            # 현재 프레임에 가장 가까운 캘리브레이션으로 교체
             self.coord_mapper.mapper = self.calib_set.get_mapper(frame_n)
 
-            # --- 탐지 & 추적 ---
             raw_detections = self.detector.detect(frame)
             detections = self._filter_inside_field(raw_detections)
             detections = self.classifier.classify(frame, detections)
-            tracks     = self.tracker.update(detections)
+            tracks = self.tracker.update(detections)
 
-            # --- 좌표 변환 ---
             positions = []
             for t in tracks:
                 mx, my = self.coord_mapper.to_meters(t["bbox"])
                 cx, cy = self.coord_mapper.to_canvas(t["bbox"])
                 positions.append({"id": t["id"], "mx": mx, "my": my, "cx": cx, "cy": cy})
 
-            # --- 통계 ---
             speed_stats = self.speed_calc.update(positions)
             self.possession.update(tracks, positions)
 
-            # --- 탑뷰 ---
             topview = self._make_topview_canvas()
             self.path_drawer.update(positions)
             self.path_drawer.draw(topview)
             draw_topview_dots(topview, positions, tracks)
 
-            # --- 원본 프레임 ---
             draw_tracks(frame, tracks, speed_stats)
             self.detected_writer.write(frame)
             self.topview_writer.write(topview)
@@ -121,7 +115,7 @@ class VideoPipeline:
                     int(frame.shape[0] * self.display_scale),
                 ))
                 cv2.imshow("MatchVision - Original", display)
-                cv2.imshow("MatchVision - TopView",  topview)
+                cv2.imshow("MatchVision - TopView", topview)
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
@@ -139,7 +133,7 @@ class VideoPipeline:
         cv2.line(canvas, (half_x, 0), (half_x, CANVAS_H), (255, 255, 255), 1)
         r = int(9.15 * CANVAS_W / FIELD_W)
         cv2.circle(canvas, (half_x, CANVAS_H // 2), r, (255, 255, 255), 1)
-        self._draw_box(canvas,  0.0, 13.84, 16.5, 54.16)
+        self._draw_box(canvas, 0.0, 13.84, 16.5, 54.16)
         self._draw_box(canvas, 88.5, 13.84, 105.0, 54.16)
         return canvas
 
@@ -175,6 +169,6 @@ class VideoPipeline:
 
         ratios = self.possession._ratios()
         if ratios:
-            print("\n=== 점유율 ===")
+            print("\n=== Possession ===")
             for tid, ratio in sorted(ratios.items(), key=lambda x: -x[1]):
                 print(f"  ID {tid:3d}: {ratio*100:.1f}%")

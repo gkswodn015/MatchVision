@@ -1,48 +1,38 @@
-# FIFA 표준 경기장: 105m x 68m
-# 원점(0, 0) = 좌상 코너, x축 = 오른쪽, y축 = 아래쪽
-
+# FIFA standard pitch: 105m x 68m
+# Origin (0, 0) = top-left corner, x-axis = right, y-axis = down
 FIELD_W = 105.0
 FIELD_H = 68.0
 
 LANDMARKS: dict[str, tuple[float, float]] = {
-    # 코너
-    "좌상 코너":           (  0.0,  0.0),
-    "우상 코너":           (105.0,  0.0),
-    "우하 코너":           (105.0, 68.0),
-    "좌하 코너":           (  0.0, 68.0),
+    "Top-left corner": (0.0, 0.0),
+    "Top-right corner": (105.0, 0.0),
+    "Bottom-right corner": (105.0, 68.0),
+    "Bottom-left corner": (0.0, 68.0),
 
-    # 하프라인
-    "하프라인 위":         ( 52.5,  0.0),
-    "하프라인 아래":       ( 52.5, 68.0),
-    "센터 스팟":           ( 52.5, 34.0),
+    "Halfway line top": (52.5, 0.0),
+    "Halfway line bottom": (52.5, 68.0),
+    "Center spot": (52.5, 34.0),
 
-    # 왼쪽 페널티 박스 (골라인에서 16.5m)
-    "좌 페널티박스 우상":  ( 16.5, 13.84),
-    "좌 페널티박스 우하":  ( 16.5, 54.16),
-    "좌 페널티박스 좌상":  (  0.0, 13.84),
-    "좌 페널티박스 좌하":  (  0.0, 54.16),
+    "Left penalty box upper-right": (16.5, 13.84),
+    "Left penalty box lower-right": (16.5, 54.16),
+    "Left penalty box upper-left": (0.0, 13.84),
+    "Left penalty box lower-left": (0.0, 54.16),
 
-    # 오른쪽 페널티 박스
-    "우 페널티박스 좌상":  ( 88.5, 13.84),
-    "우 페널티박스 좌하":  ( 88.5, 54.16),
-    "우 페널티박스 우상":  (105.0, 13.84),
-    "우 페널티박스 우하":  (105.0, 54.16),
+    "Right penalty box upper-left": (88.5, 13.84),
+    "Right penalty box lower-left": (88.5, 54.16),
+    "Right penalty box upper-right": (105.0, 13.84),
+    "Right penalty box lower-right": (105.0, 54.16),
 
-    # 왼쪽 골 에어리어 (골라인에서 5.5m)
-    "좌 골에어리어 우상":  (  5.5, 24.84),
-    "좌 골에어리어 우하":  (  5.5, 43.16),
+    "Left goal area upper-right": (5.5, 24.84),
+    "Left goal area lower-right": (5.5, 43.16),
+    "Right goal area upper-left": (99.5, 24.84),
+    "Right goal area lower-left": (99.5, 43.16),
 
-    # 오른쪽 골 에어리어
-    "우 골에어리어 좌상":  ( 99.5, 24.84),
-    "우 골에어리어 좌하":  ( 99.5, 43.16),
+    "Left penalty spot": (11.0, 34.0),
+    "Right penalty spot": (94.0, 34.0),
 
-    # 페널티 스팟
-    "좌 페널티 스팟":      ( 11.0, 34.0),
-    "우 페널티 스팟":      ( 94.0, 34.0),
-
-    # 골포스트 (터치라인 기준)
-    "좌 골포스트 위":      (  0.0, 30.34),
-    "좌 골포스트 아래":    (  0.0, 37.66),
-    "우 골포스트 위":      (105.0, 30.34),
-    "우 골포스트 아래":    (105.0, 37.66),
+    "Left goalpost upper": (0.0, 30.34),
+    "Left goalpost lower": (0.0, 37.66),
+    "Right goalpost upper": (105.0, 30.34),
+    "Right goalpost lower": (105.0, 37.66),
 }
