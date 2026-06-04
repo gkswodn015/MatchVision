@@ -51,6 +51,7 @@ class TeamClassifier:
                 det["role"] = "unknown"
                 continue
 
+            det["appearance"] = feature
             x1, _, x2, _ = det["bbox"]
             cx = (x1 + x2) / 2
             persons.append((i, feature, cx))
