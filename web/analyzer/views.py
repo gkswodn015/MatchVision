@@ -15,6 +15,12 @@ from .forms import (
 )
 from .models import Match, AnalysisResult, PlayerResult, Team, Player
 from .services.analyzer_runner import AnalyzerRunError, import_analyzer_result_videos, run_analyzer_for_match
+from .services.fotmob_report import (
+    build_fotmob_table,
+    crawl_fotmob_report,
+    dump_fotmob_report,
+    load_fotmob_report,
+)
 
 
 def main(request):
@@ -263,22 +269,13 @@ def analysis_report(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
     analysis = get_object_or_404(AnalysisResult, match=match)
     _sync_analysis_videos(match, analysis)
-    players = analysis.players.all()
-
-    report_settings = request.session.get('report_settings', {
-        'show_tracking': True,
-        'show_path': True,
-        'show_topview': True,
-        'show_speed': True,
-        'show_summary': True,
-        'heatmap_opacity': 60,
-    })
+    fotmob_report = load_fotmob_report(analysis.team_stats)
 
     return render(request, 'analyzer/analysis_report.html', {
         'match': match,
         'analysis': analysis,
-        'players': players,
-        'report_settings': report_settings,
+        'fotmob_report': fotmob_report,
+        'fotmob_rows': build_fotmob_table(fotmob_report),
     })
 
 
@@ -308,27 +305,23 @@ def update_report_info(request, match_id):
     analysis = get_object_or_404(AnalysisResult, match=match)
 
     if request.method == 'POST':
-        url = request.POST.get('match_info_url', '')
+        url = request.POST.get('match_info_url', '').strip()
         analysis.match_info_url = url
 
         if url:
-            home_name = match.home_team.name if match.home_team else '홈팀'
-            away_name = match.away_team.name if match.away_team else '원정팀'
+            try:
+                fotmob_report = crawl_fotmob_report(url)
+                home_team = fotmob_report.get('home_team', 'HOME')
+                away_team = fotmob_report.get('away_team', 'AWAY')
+                score = fotmob_report.get('score') or 'N/A'
 
-            analysis.score_info = f'{home_name} 2 : 1 {away_name}'
-            analysis.goal_records = (
-                f'전반 23분 {home_name} 득점\n'
-                f'후반 12분 {home_name} 득점\n'
-                f'후반 31분 {away_name} 득점'
-            )
-            analysis.lineup_info = (
-                f'{home_name} 라인업: GK, DF, MF, FW\n'
-                f'{away_name} 라인업: GK, DF, MF, FW'
-            )
-            analysis.team_stats = (
-                f'{home_name} 점유율 55%, 슈팅 8회, 패스 성공률 82%\n'
-                f'{away_name} 점유율 45%, 슈팅 6회, 패스 성공률 78%'
-            )
+                analysis.score_info = f'{home_team} {score} {away_team}'
+                analysis.team_stats = dump_fotmob_report(fotmob_report)
+            except Exception as exc:
+                analysis.score_info = ''
+                analysis.team_stats = dump_fotmob_report({
+                    'error': f'FotMob 크롤링 실패: {exc}',
+                })
         else:
             analysis.score_info = ''
             analysis.goal_records = ''

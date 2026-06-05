@@ -1,261 +1,244 @@
-from selenium import webdriver
-from selenium.webdriver.edge.service import Service
-from selenium.webdriver.edge.options import Options
-from webdriver_manager.microsoft import EdgeChromiumDriverManager
-from bs4 import BeautifulSoup
-import time
+import os
 import re
+import time
 
-# ====================================
-# Edge 옵션 설정
-# ====================================
-options = Options()
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.edge.service import Service
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
-# 브라우저 숨기기
-options.add_argument("--headless")
 
-# webdriver-manager 사용
-service = Service(
-    EdgeChromiumDriverManager().install()
-)
+STAT_KEYS = {
+    "Ball possession": "possession",
+    "Expected goals (xG)": "xg",
+    "Total shots": "total_shots",
+    "Passes": "passes",
+    "Accurate passes": "pass_accuracy",
+    "Corners": "corners",
+    "Offsides": "offsides",
+}
 
-# ====================================
-# 반복 실행
-# ====================================
-while True:
 
-    print("\n========================================")
-
-    url = input("FotMob 경기 URL 입력: ")
-
-    # 빈 입력 방지
-    if url.strip() == "":
-        continue
-
-    # ====================================
-    # URL 영어 버전 강제 변환
-    # ====================================
-    try:
-
-        parts = url.split("/")
-
-        # language 부분 강제 변경
+def normalize_fotmob_url(url):
+    parts = url.strip().split("/")
+    if len(parts) > 3:
         parts[3] = "en-GB"
+    normalized = "/".join(parts)
 
-        url = "/".join(parts)
+    if ":tab=stats" not in normalized:
+        normalized += ":tab=stats"
 
-    except:
+    return normalized
 
-        print("잘못된 URL 형식")
-        continue
 
-    # ====================================
-    # stats 탭 자동 이동
-    # ====================================
-    if ":tab=stats" not in url:
-        url += ":tab=stats"
+def crawl_match_stats(url, wait_seconds=3):
+    driver = _create_driver()
 
-    # ====================================
-    # 매 반복마다 새 driver 생성
-    # ====================================
-    driver = webdriver.Edge(
-        service=service,
-        options=options
+    try:
+        normalized_url = normalize_fotmob_url(url)
+        driver.get(normalized_url)
+        time.sleep(wait_seconds)
+
+        html = driver.page_source
+        soup = BeautifulSoup(html, "html.parser")
+
+        result = _empty_result(normalized_url)
+        result.update(_extract_teams_and_score(driver.title, soup))
+        result["stats"].update(_extract_list_stats(soup))
+        result["stats"].update(_extract_text_stats(soup))
+        result["stats"]["possession"] = _extract_possession(html)
+
+        return result
+    finally:
+        driver.quit()
+
+
+def _create_driver():
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1440,1200")
+
+    try:
+        return webdriver.Edge(options=options)
+    except Exception:
+        os.environ.setdefault("WDM_SSL_VERIFY", "0")
+        service = Service(EdgeChromiumDriverManager().install())
+        return webdriver.Edge(service=service, options=options)
+
+
+def _empty_result(url):
+    return {
+        "source_url": url,
+        "home_team": "HOME",
+        "away_team": "AWAY",
+        "score": "N/A",
+        "stats": {
+            "possession": ["N/A", "N/A"],
+            "xg": ["N/A", "N/A"],
+            "total_shots": ["N/A", "N/A"],
+            "passes": ["N/A", "N/A"],
+            "pass_accuracy": ["N/A", "N/A"],
+            "corners": ["N/A", "N/A"],
+            "offsides": ["N/A", "N/A"],
+        },
+    }
+
+
+def _extract_teams_and_score(title, soup):
+    clean_title = title.replace(" - FotMob", "").strip()
+    home_team = "HOME"
+    away_team = "AWAY"
+
+    if " vs " in clean_title:
+        home_team, away_part = clean_title.split(" vs ", 1)
+        away_team = away_part.split(" - ", 1)[0].strip()
+        home_team = home_team.strip()
+
+    page_text = soup.get_text(" ", strip=True)
+    score = _extract_score(page_text, home_team, away_team)
+
+    return {
+        "home_team": home_team,
+        "away_team": away_team,
+        "score": score,
+    }
+
+
+def _extract_score(text, home_team, away_team):
+    review_match = re.search(r"Match Review.*?\b(\d{1,2})-(\d{1,2})\b", text)
+    if review_match:
+        return f"{review_match.group(1)} - {review_match.group(2)}"
+
+    ft_match = re.search(r"\bFT\s+(\d{1,2})\s*[-:]\s*(\d{1,2})\b", text)
+    if ft_match:
+        return f"{ft_match.group(1)} - {ft_match.group(2)}"
+
+    team_score_pattern = (
+        rf"{re.escape(home_team)}\s+(\d+)\s*[-:]\s*(\d+)\s+{re.escape(away_team)}"
     )
+    match = re.search(team_score_pattern, text, flags=re.IGNORECASE)
+    if match:
+        return f"{match.group(1)} - {match.group(2)}"
 
-    # ====================================
-    # 페이지 접속
-    # ====================================
-    driver.get(url)
+    return "N/A"
 
 
+def _extract_list_stats(soup):
+    stats = {}
 
-    # ====================================
-    # HTML 가져오기
-    # ====================================
-    html = driver.page_source
-
-    # BeautifulSoup 분석
-    soup = BeautifulSoup(html, "html.parser")
-
-    # ====================================
-    # 팀 이름 추출
-    # ====================================
-    title = driver.title.replace(" - FotMob", "")
-
-    # 영어 페이지
-    if " vs " in title:
-
-        teams = title.split(" vs ")
-
-        home_team = teams[0].strip()
-
-        away_team = teams[1].split(" - ")[0].strip()
-
-    # 한국어 fallback
-    elif " 대 " in title:
-
-        teams = title.split(" 대 ")
-
-        home_team = teams[0].strip()
-
-        away_team = teams[1].split(" - ")[0].strip()
-
-    else:
-
-        home_team = "HOME"
-
-        away_team = "AWAY"
-
-    # ====================================
-    # 경기 날짜 추출
-    # ====================================
-    date_match = re.search(r"\d{4}-\d{2}-\d{2}", html)
-
-    if date_match:
-        match_date = date_match.group()
-    else:
-        match_date = "날짜 정보 없음"
-
-    # ====================================
-    # stat 저장
-    # ====================================
-    all_stats = {}
-
-    stats = soup.find_all("li")
-
-    for stat in stats:
-
+    for stat in soup.find_all("li"):
         text = stat.get_text(" ", strip=True)
 
-        stat_names = [
-            "Expected goals (xG)",
-            "Total shots",
-            "Passes",
-            "Accurate passes",
-            "Corners",
-            "Offsides"
+        for display_name, key in STAT_KEYS.items():
+            if display_name not in text or display_name == "Ball possession":
+                continue
+
+            if display_name == "Accurate passes":
+                stats[key] = _extract_pass_accuracy(text)
+            else:
+                values = re.findall(r"\d+\.\d+|\d+%?", text)
+                if len(values) >= 2:
+                    stats[key] = [values[0], values[1]]
+
+    return stats
+
+
+def _extract_pass_accuracy(text):
+    nums = re.findall(r"\d+", text)
+
+    if len(nums) >= 4:
+        return [f"{nums[0]} ({nums[1]}%)", f"{nums[2]} ({nums[3]}%)"]
+
+    values = re.findall(r"\d+%?", text)
+    if len(values) >= 2:
+        return [values[0], values[1]]
+
+    return ["N/A", "N/A"]
+
+
+def _extract_text_stats(soup):
+    text = soup.get_text(" ", strip=True)
+    stats = {}
+
+    text_patterns = {
+        "xg": "Expected goals \\(xG\\)",
+        "total_shots": "Total shots",
+        "passes": "Passes",
+        "pass_accuracy": "Accurate passes",
+        "corners": "Corners",
+        "offsides": "Offsides",
+    }
+
+    for key, label_pattern in text_patterns.items():
+        value_pattern = r"\d+\.\d+|\d+\s+\(\d+%\)|\d+"
+        match = re.search(
+            rf"({value_pattern})\s+{label_pattern}\s+({value_pattern})",
+            text,
+        )
+        if match:
+            stats[key] = [_compact_value(match.group(1)), _compact_value(match.group(2))]
+
+    possession_match = re.search(r"(\d+)\s+Ball possession\s+(\d+)", text)
+    if possession_match:
+        stats["possession"] = [
+            f"{possession_match.group(1)}%",
+            f"{possession_match.group(2)}%",
         ]
 
-        for name in stat_names:
+    return stats
 
-            if name in text:
 
-                # Accurate passes 별도 처리
-                if name == "Accurate passes":
+def _compact_value(value):
+    return re.sub(r"\s+", " ", value).strip()
 
-                    nums = re.findall(
-                        r"\d+",
-                        text
-                    )
 
-                    if len(nums) >= 4:
-
-                        home_value = (
-                            nums[0] + " (" + nums[1] + "%)"
-                        )
-
-                        away_value = (
-                            nums[2] + " (" + nums[3] + "%)"
-                        )
-
-                        all_stats[name] = (
-                            home_value,
-                            away_value
-                        )
-
-                else:
-
-                    values = re.findall(
-                        r"\d+\.\d+|\d+%?",
-                        text
-                    )
-
-                    if len(values) >= 2:
-
-                        all_stats[name] = (
-                            values[0],
-                            values[1]
-                        )
-
-    # ====================================
-    # Ball possession 별도 처리
-    # ====================================
-    possession_home = "N/A"
-    possession_away = "N/A"
-
+def _extract_possession(html):
     index = html.find("Ball possession")
+    if index == -1:
+        return ["N/A", "N/A"]
 
-    if index != -1:
+    chunk = html[index - 500:index + 500]
+    values = re.findall(r"\d+%", chunk)
+    if len(values) >= 2:
+        return [values[-2], values[-1]]
 
-        chunk = html[index-500:index+500]
+    return ["N/A", "N/A"]
 
-        values = re.findall(r"\d+%", chunk)
 
-        if len(values) >= 2:
-
-            possession_home = values[-2]
-            possession_away = values[-1]
-
-    # ====================================
-    # 출력 함수
-    # ====================================
-    def print_stat(display_name):
-
-        if display_name in all_stats:
-
-            home, away = all_stats[display_name]
-
-            print(
-                f"{display_name:25} "
-                f"{home:20} "
-                f"{away}"
-            )
-
-        else:
-
-            print(
-                f"{display_name:25} "
-                f"{'N/A':20} "
-                f"{'N/A'}"
-            )
-
-    # ====================================
-    # 결과 출력
-    # ====================================
+def print_match_stats(result):
     print("\n========================================")
-    print("경기 날짜:", match_date)
+    print(f"{result['home_team']} vs {result['away_team']}")
+    print(f"Score: {result['score']}")
     print("========================================\n")
-
-    print(f"{home_team} vs {away_team}\n")
-
-    print(
-        f"{'STAT':25} "
-        f"{home_team:20} "
-        f"{away_team}"
-    )
-
+    print(f"{'STAT':25} {result['home_team']:20} {result['away_team']}")
     print("-" * 75)
 
-    print(
-        f"{'Ball possession':25} "
-        f"{possession_home:20} "
-        f"{possession_away}"
-    )
+    labels = [
+        ("Ball possession", "possession"),
+        ("Expected goals (xG)", "xg"),
+        ("Total shots", "total_shots"),
+        ("Passes", "passes"),
+        ("Accurate passes", "pass_accuracy"),
+        ("Corners", "corners"),
+        ("Offsides", "offsides"),
+    ]
 
-    print_stat("Expected goals (xG)")
+    for label, key in labels:
+        home, away = result["stats"].get(key, ["N/A", "N/A"])
+        print(f"{label:25} {home:20} {away}")
 
-    print_stat("Total shots")
 
-    print_stat("Passes")
+if __name__ == "__main__":
+    while True:
+        print("\n========================================")
+        fotmob_url = input("FotMob 경기 URL 입력: ").strip()
 
-    print_stat("Accurate passes")
+        if not fotmob_url:
+            continue
 
-    print_stat("Corners")
-
-    print_stat("Offsides")
-
-    # ====================================
-    # driver 종료
-    # ====================================
-    driver.quit()
+        try:
+            print_match_stats(crawl_match_stats(fotmob_url))
+        except Exception as exc:
+            print(f"크롤링 실패: {exc}")
