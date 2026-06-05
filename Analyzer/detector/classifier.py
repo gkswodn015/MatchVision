@@ -4,8 +4,8 @@ import numpy as np
 
 PICK_WINDOW = "Role Sample Picker"
 ROLE_ORDER = [
-    ("our_team", "OUR TEAM"),
-    ("opponent", "OPPONENT"),
+    ("our_team", "HOME TEAM"),
+    ("opponent", "AWAY TEAM"),
     ("referee", "REFEREE"),
 ]
 
@@ -15,7 +15,7 @@ class TeamClassifier:
     Classifies person detections into our_team/opponent/referee using torso color.
 
     Without manual team samples there is no reliable way to know semantic
-    "our team"; the initial assignment is deterministic: the color cluster whose
+    "home team"; the initial assignment is deterministic: the color cluster whose
     players are more left-side on the first usable frame becomes our_team.
     """
 

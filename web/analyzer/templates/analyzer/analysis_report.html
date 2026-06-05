@@ -47,8 +47,64 @@
         color: #666;
     }
 
+    .team-id-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .team-id-sector {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 16px;
+        background: #fafafa;
+    }
+
+    .team-id-sector h4 {
+        margin: 0 0 12px;
+    }
+
+    .id-badges {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-height: 38px;
+        align-items: center;
+    }
+
+    .id-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 42px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--main-color);
+        color: white;
+        font-weight: bold;
+        padding: 0 10px;
+    }
+
+    .referee-line {
+        margin-top: 14px;
+    }
+
+    .track-player-row {
+        display: grid;
+        grid-template-columns: auto minmax(120px, 0.8fr) minmax(180px, 1fr);
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .track-player-row select {
+        width: 100%;
+        min-width: 0;
+    }
+
     @media (max-width: 760px) {
-        .match-summary {
+        .match-summary,
+        .team-id-grid {
             grid-template-columns: 1fr;
         }
     }
@@ -115,6 +171,58 @@
     </table>
     {% else %}
     <p class="disabled">FotMob 경기 URL을 입력하면 팀, 경기 결과, 점유율, xG, 슈팅, 패스, 코너킥, 오프사이드 정보가 표시됩니다.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>팀별 선수 ID</h3>
+
+    <form method="post" action="{% url 'update_track_players' match.id %}">
+        {% csrf_token %}
+
+    <div class="team-id-grid">
+        {% for section in team_id_sections %}
+        <div class="team-id-sector">
+            <h4>{{ section.title }}</h4>
+            <div>
+                {% for entry in section.entries %}
+                <div class="track-player-row">
+                    <span class="id-badge">#{{ entry.id }}</span>
+                    <span>
+                        {% if entry.assigned_player_name %}
+                            {{ entry.assigned_player_name }}
+                        {% else %}
+                            <span class="disabled">미지정</span>
+                        {% endif %}
+                    </span>
+                    <select name="player_{{ section.group }}_{{ entry.id }}">
+                        <option value="">선수 미지정</option>
+                        {% for player in players %}
+                        <option value="{{ player.id }}" {% if entry.assigned_player_id == player.id %}selected{% endif %}>
+                            {% if player.jersey_number %}#{{ player.jersey_number }} {% endif %}{{ player.name }}{% if player.position %} · {{ player.position }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% empty %}
+                <span class="disabled">분류된 선수 ID가 없습니다.</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <button class="button" type="submit">선수 배정 저장</button>
+    <a class="button" href="{% url 'player_manage' %}">선수 관리</a>
+    </form>
+
+    {% if referee_ids %}
+    <p class="referee-line">
+        <strong>심판 ID:</strong>
+        {% for id in referee_ids %}
+        <span class="id-badge">#{{ id }}</span>
+        {% endfor %}
+    </p>
     {% endif %}
 </div>
 

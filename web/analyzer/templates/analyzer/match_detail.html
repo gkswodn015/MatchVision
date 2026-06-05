@@ -17,14 +17,6 @@
     <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
     <p><strong>업로드 사용자:</strong> {{ match.uploaded_by.username }}</p>
 
-    {% if match.home_team %}
-        <p><strong>홈팀:</strong> {{ match.home_team.name }}</p>
-    {% endif %}
-
-    {% if match.away_team %}
-        <p><strong>원정팀:</strong> {{ match.away_team.name }}</p>
-    {% endif %}
-
     <hr>
 
     <h3>업로드된 경기 영상</h3>

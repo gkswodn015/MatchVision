@@ -91,7 +91,7 @@ def main():
     if sum(1 for det in sample_detections if det["class"] == "person") < 3:
         sample_detections = raw_sample_detections
 
-    print("Click one OUR TEAM player, one OPPONENT player, and one REFEREE.")
+    print("Click one HOME TEAM player, one AWAY TEAM player, and one REFEREE.")
     classifier = pick_role_samples(sample_frame, sample_detections)
 
     pipeline = VideoPipeline(video_path, calib_set, classifier=classifier)

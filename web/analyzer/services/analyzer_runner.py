@@ -1,8 +1,9 @@
 import os
+import json
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from django.conf import settings
@@ -12,6 +13,7 @@ from django.conf import settings
 class AnalyzerRunResult:
     detected_video_name: str
     topview_video_name: str
+    team_ids: dict = field(default_factory=dict)
 
 
 class AnalyzerRunError(RuntimeError):
@@ -44,9 +46,11 @@ def run_analyzer_for_match(match, log_callback=None) -> AnalyzerRunResult:
     analyzer_result_dir = analyzer_dir / "result"
     detected_src = analyzer_result_dir / f"{video_stem}_detected.mp4"
     topview_src = analyzer_result_dir / f"{video_stem}_topview.mp4"
+    team_ids_src = analyzer_result_dir / f"{video_stem}_team_ids.json"
 
     _remove_stale_output(detected_src)
     _remove_stale_output(topview_src)
+    _remove_stale_output(team_ids_src)
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(analyzer_dir)
@@ -84,9 +88,14 @@ def import_analyzer_result_videos(match) -> AnalyzerRunResult:
 
     detected_src = analyzer_result_dir / f"{video_stem}_detected.mp4"
     topview_src = analyzer_result_dir / f"{video_stem}_topview.mp4"
+    team_ids_src = analyzer_result_dir / f"{video_stem}_team_ids.json"
 
     if not detected_src.exists() or not topview_src.exists():
         detected_src, topview_src = _find_latest_result_pair(analyzer_result_dir, video_stem)
+        if detected_src is not None:
+            team_ids_src = detected_src.with_name(
+                detected_src.name.replace("_detected.mp4", "_team_ids.json")
+            )
 
     if detected_src is None or topview_src is None:
         raise AnalyzerRunError(
@@ -108,12 +117,26 @@ def import_analyzer_result_videos(match) -> AnalyzerRunResult:
     return AnalyzerRunResult(
         detected_video_name=detected_name,
         topview_video_name=topview_name,
+        team_ids=_load_team_ids(team_ids_src),
     )
 
 
 def _remove_stale_output(path: Path) -> None:
     if path.exists():
         path.unlink()
+
+
+def _load_team_ids(path: Path) -> dict:
+    if not path.exists():
+        return {}
+
+    try:
+        with path.open("r", encoding="utf-8") as fp:
+            data = json.load(fp)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    return data if isinstance(data, dict) else {}
 
 
 def _web_mp4_name(source: Path) -> str:

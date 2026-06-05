@@ -28,46 +28,16 @@
 </div>
 
 <div class="card">
-    <h3>팀 선택 및 Analyzer 실행</h3>
+    <h3>Analyzer 실행</h3>
+    <p>
+        분석 중 OpenCV 창에서 HOME TEAM, AWAY TEAM, REFEREE 샘플을 차례대로 선택합니다.
+        리포트에서는 이 분류 결과를 FotMob에서 가져온 홈팀/원정팀 이름에 대응해 표시합니다.
+    </p>
 
-    {% if teams %}
-        <form method="post" action="{% url 'request_analysis' match.id %}">
-            {% csrf_token %}
-
-            <p>
-                <label>홈팀 선택</label><br>
-                <select name="home_team">
-                    <option value="">홈팀 선택 안 함</option>
-                    {% for team in teams %}
-                        <option value="{{ team.id }}"
-                            {% if match.home_team and match.home_team.id == team.id %}selected{% endif %}
-                        >
-                            {{ team.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </p>
-
-            <p>
-                <label>원정팀 선택</label><br>
-                <select name="away_team">
-                    <option value="">원정팀 선택 안 함</option>
-                    {% for team in teams %}
-                        <option value="{{ team.id }}"
-                            {% if match.away_team and match.away_team.id == team.id %}selected{% endif %}
-                        >
-                            {{ team.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </p>
-
-            <button class="button" type="submit">Analyzer 실행</button>
-        </form>
-    {% else %}
-        <p>등록된 팀이 없습니다. 먼저 팀/선수 관리 페이지에서 팀을 등록해 주세요.</p>
-        <a class="button" href="{% url 'team_player_manage' %}">팀/선수 관리로 이동</a>
-    {% endif %}
+    <form method="post" action="{% url 'request_analysis' match.id %}">
+        {% csrf_token %}
+        <button class="button" type="submit">Analyzer 실행</button>
+    </form>
 </div>
 
 <div class="card">

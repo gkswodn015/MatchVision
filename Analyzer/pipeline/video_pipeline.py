@@ -1,4 +1,6 @@
 import os
+import json
+from collections import Counter, defaultdict
 
 import cv2
 import numpy as np
@@ -58,6 +60,8 @@ class VideoPipeline:
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         self.detected_path = os.path.join(self.result_dir, f"{video_name}_detected.mp4")
         self.topview_path = os.path.join(self.result_dir, f"{video_name}_topview.mp4")
+        self.team_ids_path = os.path.join(self.result_dir, f"{video_name}_team_ids.json")
+        self.team_id_votes = defaultdict(Counter)
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self.detected_writer = cv2.VideoWriter(
@@ -102,6 +106,7 @@ class VideoPipeline:
                 positions.append({"id": t["id"], "mx": mx, "my": my, "cx": cx, "cy": cy})
 
             tracks, positions = self._apply_roster_constraints(tracks, positions)
+            self._record_team_ids(tracks)
 
             speed_stats = self.speed_calc.update(positions)
             self.possession.update(tracks, positions)
@@ -128,6 +133,7 @@ class VideoPipeline:
         return {
             "detected_path": self.detected_path,
             "topview_path": self.topview_path,
+            "team_ids_path": self.team_ids_path,
         }
 
     def _make_topview_canvas(self) -> np.ndarray:
@@ -372,11 +378,68 @@ class VideoPipeline:
         if self.display:
             cv2.destroyAllWindows()
 
+        self._write_team_ids()
+
         print(f"\nSaved detected video: {self.detected_path}")
         print(f"Saved topview video:  {self.topview_path}")
+        print(f"Saved team IDs:       {self.team_ids_path}")
 
         ratios = self.possession._ratios()
         if ratios:
             print("\n=== Possession ===")
             for tid, ratio in sorted(ratios.items(), key=lambda x: -x[1]):
                 print(f"  ID {tid:3d}: {ratio*100:.1f}%")
+
+    def _record_team_ids(self, tracks: list[dict]) -> None:
+        for track in tracks:
+            if track.get("class") != "person" or track.get("predicted"):
+                continue
+
+            role = self._team_role_for_summary(track)
+            if role in ("home", "away", "referee"):
+                self.team_id_votes[int(track["id"])][role] += 1
+
+    def _team_role_for_summary(self, track: dict) -> str:
+        role = track.get("role", "unknown")
+        if role == "our_team":
+            return "home"
+        if role == "opponent":
+            return "away"
+        if role == "referee":
+            return "referee"
+        if role in ("goalkeeper_left", "goalkeeper_right"):
+            return self._goalkeeper_team_role(track)
+        return "unknown"
+
+    def _goalkeeper_team_role(self, track: dict) -> str:
+        votes = track.get("role_votes", {})
+        home_votes = int(votes.get("our_team", 0))
+        away_votes = int(votes.get("opponent", 0))
+        if home_votes == 0 and away_votes == 0:
+            return "unknown"
+        return "home" if home_votes >= away_votes else "away"
+
+    def _write_team_ids(self) -> None:
+        groups = {
+            "home_ids": [],
+            "away_ids": [],
+            "referee_ids": [],
+            "unknown_ids": [],
+        }
+
+        for track_id, votes in sorted(self.team_id_votes.items()):
+            if not votes:
+                continue
+            role, frames = votes.most_common(1)[0]
+            item = {"id": track_id, "frames": frames}
+            if role == "home":
+                groups["home_ids"].append(item)
+            elif role == "away":
+                groups["away_ids"].append(item)
+            elif role == "referee":
+                groups["referee_ids"].append(item)
+            else:
+                groups["unknown_ids"].append(item)
+
+        with open(self.team_ids_path, "w", encoding="utf-8") as fp:
+            json.dump(groups, fp, ensure_ascii=False, indent=2)
