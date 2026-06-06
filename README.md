@@ -18,8 +18,6 @@ MatchVision은 축구 경기 영상을 업로드하고, 선수/공 탐지 결과
 
 ## 실행 방법
 
-GitHub에서 ZIP 파일로 내려받아 처음 실행하는 경우를 기준으로 설명합니다.
-압축을 푼 프로젝트 폴더 이름이 다르면 `MatchVision-main` 부분만 실제 폴더 이름으로 바꿔서 실행합니다.
 Python 3.12 이상이 설치되어 있어야 합니다.
 
 ```powershell
@@ -40,19 +38,6 @@ http://127.0.0.1:8000/
 ```
 
 서버를 종료하려면 PowerShell 창에서 `Ctrl + C`를 누릅니다.
-
-PowerShell에서 `Activate.ps1` 실행 정책 오류가 나면, 같은 PowerShell 창에서 아래 명령어를 먼저 실행한 뒤 다시 활성화합니다.
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\venv\Scripts\Activate.ps1
-```
-
-이미 `web` 폴더 안으로 들어간 상태에서 가상환경을 활성화해야 한다면 아래처럼 한 단계 위의 `venv`를 지정합니다.
-
-```powershell
-..\venv\Scripts\Activate.ps1
-```
 
 ## 사용하는 방법
 
