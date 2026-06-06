@@ -129,6 +129,8 @@ class TeamClassifier:
     def _update_prototype(self, role: str, feature: np.ndarray):
         if role not in self._prototypes:
             return
+        if self._manual_roles:
+            return
         alpha = 0.01 if self._manual_roles else 0.04
         self._prototypes[role] = self._prototypes[role] * (1.0 - alpha) + feature * alpha
 
