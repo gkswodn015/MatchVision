@@ -24,6 +24,13 @@ class HomographyMapper:
         """Update H to reflect camera motion tracked by CameraTracker."""
         self.H = H.astype(np.float32)
 
+    def clone(self) -> "HomographyMapper":
+        mapper = object.__new__(HomographyMapper)
+        mapper.src_points = self.src_points.copy()
+        mapper.dst_points = self.dst_points.copy()
+        mapper.H = self.H.copy()
+        return mapper
+
     def to_meters(self, pixel_x: int, pixel_y: int) -> tuple[float, float]:
         pt = np.float32([[[pixel_x, pixel_y]]])
         result = cv2.perspectiveTransform(pt, self.H)

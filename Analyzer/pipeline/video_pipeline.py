@@ -16,10 +16,11 @@ from topview.coordinate_mapper import (
     CoordinateMapper,
 )
 from topview.calibration_set import CalibrationSet
+from topview.camera_tracker import CameraTracker
 from topview.field_landmarks import FIELD_W, FIELD_H
 from stats.speed_calculator import SpeedCalculator
 from stats.possession import PossessionTracker
-from visualizer.overlay import draw_tracks, draw_topview_dots
+from visualizer.overlay import draw_debug_panel, draw_tracks, draw_topview_dots
 
 
 class VideoPipeline:
@@ -38,6 +39,13 @@ class VideoPipeline:
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
         self.calib_set = calib_set
         self.coord_mapper = CoordinateMapper(calib_set.get_mapper(0))
+        self.camera_tracker: CameraTracker | None = None
+        self.tracked_mapper = None
+        self.calibration_state = {
+            "mode": "nearest",
+            "calibration_frame": self.calib_set.nearest_frame_index(0),
+            "anchors": 0,
+        }
         self.display = display
 
         self.detector = YoloDetector()
@@ -92,7 +100,7 @@ class VideoPipeline:
                 break
             frame_n += 1
 
-            self.coord_mapper.mapper = self.calib_set.get_mapper(frame_n)
+            self._update_coordinate_mapper(frame_n - 1, frame)
 
             raw_detections = self.detector.detect(frame)
             detections = self._filter_inside_field(raw_detections)
@@ -115,6 +123,7 @@ class VideoPipeline:
             draw_topview_dots(topview, positions, tracks)
 
             draw_tracks(frame, tracks, speed_stats)
+            draw_debug_panel(frame, frame_n - 1, self.calibration_state)
             self.detected_writer.write(frame)
             self.topview_writer.write(topview)
 
@@ -178,6 +187,45 @@ class VideoPipeline:
         cv2.circle(canvas, self._to_canvas_point(11.0, 34.0), 4, line, -1, cv2.LINE_AA)
         cv2.circle(canvas, self._to_canvas_point(94.0, 34.0), 4, line, -1, cv2.LINE_AA)
         return canvas
+
+    def _update_coordinate_mapper(self, frame_idx: int, frame: np.ndarray) -> None:
+        exact = self.calib_set.get_exact(frame_idx)
+        if exact is not None:
+            calibration_frame, mapper = exact
+            self.tracked_mapper = mapper.clone()
+            self.camera_tracker = CameraTracker(
+                frame,
+                self.tracked_mapper.H,
+                self.tracked_mapper.src_points,
+                self.tracked_mapper.dst_points,
+            )
+            self.coord_mapper.mapper = self.tracked_mapper
+            self.calibration_state = {
+                "mode": "tracked",
+                "calibration_frame": calibration_frame,
+                "anchors": self.camera_tracker.anchor_count,
+            }
+            return
+
+        if self.camera_tracker is not None and self.tracked_mapper is not None:
+            H = self.camera_tracker.update(frame)
+            if self.camera_tracker.anchor_count >= 4:
+                self.tracked_mapper.update_H(H)
+                self.coord_mapper.mapper = self.tracked_mapper
+                self.calibration_state = {
+                    "mode": "tracked",
+                    "calibration_frame": self.calibration_state["calibration_frame"],
+                    "anchors": self.camera_tracker.anchor_count,
+                }
+                return
+
+        nearest_frame = self.calib_set.nearest_frame_index(frame_idx)
+        self.coord_mapper.mapper = self.calib_set.get_mapper(frame_idx)
+        self.calibration_state = {
+            "mode": "nearest",
+            "calibration_frame": nearest_frame,
+            "anchors": 0,
+        }
 
     def _draw_box(self, canvas, mx1, my1, mx2, my2):
         x1, y1 = self._to_canvas_point(mx1, my1)

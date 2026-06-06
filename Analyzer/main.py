@@ -78,7 +78,7 @@ def main():
         m, s = divmod(int(frame_idx / fps), 60)
         print(f"\n[{i + 1}/{len(selected)}] frame {frame_idx}  ({m:02d}:{s:02d})")
         src_pts, dst_pts = pick_landmarks(frame)
-        calibrations.append((frame_idx, HomographyMapper(src_pts, dst_pts)))
+        calibrations.append((frame_idx, HomographyMapper(src_pts, dst_pts), frame))
 
     calib_set = CalibrationSet(calibrations)
     sample_frame_idx, sample_frame = selected[0]
