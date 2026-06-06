@@ -75,3 +75,20 @@ def test_ball_does_not_reuse_person_id():
     ])
 
     assert all(track["id"] != person_id or track["class"] == "person" for track in tracks)
+
+
+def test_role_locks_after_consistent_votes():
+    tracker = ByteTracker(lock_min_hits=4, lock_ratio=0.75)
+
+    tracks = []
+    for _ in range(4):
+        tracks = tracker.update([_det(100, 100, 140, 200, role="our_team")])
+
+    assert tracks[0]["locked_role"] == "our_team"
+    assert tracks[0]["role"] == "our_team"
+
+    tracks = tracker.update([_det(101, 100, 141, 200, role="opponent")])
+
+    assert tracks[0]["id"] == 1
+    assert tracks[0]["locked_role"] == "our_team"
+    assert tracks[0]["role"] == "our_team"

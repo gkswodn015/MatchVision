@@ -230,10 +230,18 @@ class VideoPipeline:
         self._assign_goalkeepers(person_tracks, pos_map)
         self._limit_referee_count(person_tracks, pos_map)
         self._balance_team_counts(person_tracks)
+        person_tracks = self._visible_person_tracks(person_tracks)
 
         kept_ids = {t["id"] for t in person_tracks + ball_tracks}
         filtered_positions = [p for p in positions if p["id"] in kept_ids]
         return person_tracks + ball_tracks, filtered_positions
+
+    @staticmethod
+    def _visible_person_tracks(person_tracks: list[dict]) -> list[dict]:
+        return [
+            track for track in person_tracks
+            if track.get("role") in {"our_team", "opponent", "referee"}
+        ]
 
     def _assign_goalkeepers(self, person_tracks: list[dict], pos_map: dict[int, dict]) -> None:
         left_keeper = self._select_goalkeeper(person_tracks, pos_map, side="left")
@@ -245,9 +253,9 @@ class VideoPipeline:
         )
 
         if left_keeper is not None:
-            left_keeper["role"] = "goalkeeper_left"
+            left_keeper["goalkeeper_candidate"] = "left"
         if right_keeper is not None:
-            right_keeper["role"] = "goalkeeper_right"
+            right_keeper["goalkeeper_candidate"] = "right"
 
     def _select_goalkeeper(
         self,
@@ -321,6 +329,8 @@ class VideoPipeline:
         for track in referees:
             if track["id"] in allowed_refs:
                 continue
+            if track.get("locked_role") == "referee":
+                continue
             track["role"] = self._best_team_role(track)
 
     def _balance_team_counts(self, person_tracks: list[dict]) -> None:
@@ -341,6 +351,8 @@ class VideoPipeline:
             )[:len(team) - 10]
 
             for track in overflow:
+                if track.get("locked_role") == role:
+                    continue
                 if other_count < 10:
                     track["role"] = other
                     other_count += 1

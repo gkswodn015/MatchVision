@@ -69,6 +69,8 @@ class ByteTracker:
         visible_lost: int = 18,
         match_threshold: float = 0.34,
         min_iou: float = 0.02,
+        lock_min_hits: int = 8,
+        lock_ratio: float = 0.68,
     ):
         self._next_id = 1
         self._tracks: dict[int, dict] = {}
@@ -76,6 +78,8 @@ class ByteTracker:
         self.visible_lost = visible_lost
         self.match_threshold = match_threshold
         self.min_iou = min_iou
+        self.lock_min_hits = lock_min_hits
+        self.lock_ratio = lock_ratio
 
     def update(self, detections: list[dict]) -> list[dict]:
         for track in self._tracks.values():
@@ -184,6 +188,8 @@ class ByteTracker:
             "class": det["class"],
             "role": det.get("role", det["class"]),
             "role_votes": deque([det.get("role", det["class"])], maxlen=18),
+            "locked_role": None,
+            "role_confidence": 0.0,
             "appearance": self._copy_appearance(det.get("appearance")),
             "lost": 0,
             "hits": 1,
@@ -197,9 +203,10 @@ class ByteTracker:
         track["class"] = det["class"]
         det_role = det.get("role", det["class"])
         track["role_votes"].append(det_role)
-        track["role"] = self._stable_role(track)
         track["lost"] = 0
         track["hits"] += 1
+        self._update_role_lock(track)
+        track["role"] = track.get("locked_role") or self._stable_role(track)
 
         det_app = det.get("appearance")
         if det_app is not None:
@@ -227,6 +234,8 @@ class ByteTracker:
                 "bbox": track["bbox"],
                 "class": track["class"],
                 "role": track.get("role", track["class"]),
+                "locked_role": track.get("locked_role"),
+                "role_confidence": track.get("role_confidence", 0.0),
                 "role_votes": dict(Counter(track.get("role_votes", []))),
                 "lost": track.get("lost", 0),
                 "hits": track.get("hits", 0),
@@ -245,6 +254,25 @@ class ByteTracker:
         if not votes:
             return track.get("role", track.get("class", "unknown"))
         return Counter(votes).most_common(1)[0][0]
+
+    def _update_role_lock(self, track: dict) -> None:
+        if track.get("locked_role"):
+            return
+        if track.get("class") != "person" or int(track.get("hits", 0)) < self.lock_min_hits:
+            return
+
+        votes = [
+            role for role in track.get("role_votes", [])
+            if role in {"our_team", "opponent", "referee"}
+        ]
+        if len(votes) < self.lock_min_hits:
+            return
+
+        role, count = Counter(votes).most_common(1)[0]
+        confidence = count / len(votes)
+        track["role_confidence"] = confidence
+        if confidence >= self.lock_ratio:
+            track["locked_role"] = role
 
     @staticmethod
     def _copy_appearance(value):

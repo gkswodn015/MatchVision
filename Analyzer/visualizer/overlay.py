@@ -45,7 +45,7 @@ def draw_tracks(frame, tracks: list[dict], speed_stats: dict[int, dict]):
             cv2.LINE_AA,
         )
 
-        label = f'#{t["id"]}'
+        label = _track_label(t)
         _draw_label(frame, label, cx, foot_y + 18, color)
 
 
@@ -67,7 +67,27 @@ def draw_topview_dots(canvas, positions: list[dict], tracks: list[dict]):
         cv2.circle(canvas, (cx, cy), radius, (8, 24, 12), 2, cv2.LINE_AA)
 
         if not is_ball:
-            _draw_topview_label(canvas, f'#{pos["id"]}', cx, cy - radius - 6, color)
+            _draw_topview_label(canvas, _track_label(track), cx, cy - radius - 6, color)
+
+
+def _track_label(track: dict) -> str:
+    role = track.get("role", "unknown")
+    role_tag = {
+        "our_team": "H",
+        "opponent": "A",
+        "referee": "R",
+        "goalkeeper_left": "GK",
+        "goalkeeper_right": "GK",
+        "unknown": "U",
+    }.get(role, "U")
+
+    parts = [f'{role_tag}#{track["id"]}']
+    if track.get("locked_role"):
+        confidence = int(round(float(track.get("role_confidence", 0.0)) * 100))
+        parts.append(f"{confidence}%")
+    if track.get("goalkeeper_candidate"):
+        parts.append("GK?")
+    return " ".join(parts)
 
 
 def _draw_label(frame, text: str, cx: int, y: int, color: tuple[int, int, int]) -> None:
