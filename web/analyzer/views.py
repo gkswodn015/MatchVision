@@ -1,3 +1,6 @@
+import threading
+
+from django.db import close_old_connections
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -7,10 +10,17 @@ from .forms import (
     SignUpForm,
     MatchUploadForm,
     MatchEditForm,
-    TeamForm,
-    PlayerForm,
 )
-from .models import Match, AnalysisResult, PlayerResult, Team, Player
+from .models import Match, AnalysisResult, PlayerResult
+from .services.analyzer_runner import AnalyzerRunError, import_analyzer_result_videos, run_analyzer_for_match
+from .services.fotmob_report import (
+    build_fotmob_player_options,
+    build_fotmob_table,
+    crawl_fotmob_report,
+    dump_fotmob_report,
+    load_fotmob_report,
+)
+from .services.team_id_report import build_team_id_sections, dump_team_ids, load_team_ids
 
 
 def main(request):
@@ -63,11 +73,9 @@ def match_detail(request, match_id):
 @login_required
 def video_analysis(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
-    teams = Team.objects.filter(user=request.user).order_by('name')
 
     return render(request, 'analyzer/video_analysis.html', {
         'match': match,
-        'teams': teams,
     })
 
 
@@ -141,31 +149,73 @@ def create_dummy_analysis_result(match):
     return analysis
 
 
+def create_analyzer_analysis_result(match):
+    analysis, _ = AnalysisResult.objects.get_or_create(match=match)
+    analysis.analysis_error = ''
+    analysis.analysis_log = ''
+    analysis.report_text = (
+        'Analyzer/main.py를 실행해 객체 탐지 영상과 탑뷰 변환 영상을 생성했습니다. '
+        '분석 과정은 기존 Analyzer의 OpenCV 창과 로그를 그대로 사용합니다.'
+    )
+    analysis.score_info = 'FotMob 경기 URL 입력 후 표시됩니다.'
+
+    def append_log(message: str) -> None:
+        AnalysisResult.objects.filter(id=analysis.id).update(
+            analysis_log=analysis.analysis_log + message + '\n'
+        )
+        analysis.analysis_log += message + '\n'
+
+    result = run_analyzer_for_match(match, log_callback=append_log)
+    analysis.detected_video.name = result.detected_video_name
+    analysis.topview_video.name = result.topview_video_name
+    analysis.analyzer_team_ids = dump_team_ids(result.team_ids)
+    analysis.save()
+
+    match.status = 'completed'
+    match.save()
+
+    return analysis
+
+
+def start_analysis_job(match_id: int) -> None:
+    thread = threading.Thread(
+        target=_run_analysis_job,
+        args=(match_id,),
+        daemon=True,
+    )
+    thread.start()
+
+
+def _run_analysis_job(match_id: int) -> None:
+    close_old_connections()
+    try:
+        match = Match.objects.get(id=match_id)
+        create_analyzer_analysis_result(match)
+    except Exception as exc:
+        try:
+            match = Match.objects.get(id=match_id)
+            analysis, _ = AnalysisResult.objects.get_or_create(match=match)
+            analysis.analysis_error = str(exc)
+            analysis.report_text = 'Analyzer 실행 중 오류가 발생했습니다.'
+            analysis.save()
+
+            match.status = 'failed'
+            match.save(update_fields=['status'])
+        finally:
+            close_old_connections()
+
+
 @login_required
 def request_analysis(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
 
     if request.method == 'POST':
-        home_team_id = request.POST.get('home_team')
-        away_team_id = request.POST.get('away_team')
-
-        if home_team_id:
-            match.home_team = Team.objects.filter(
-                id=home_team_id,
-                user=request.user
-            ).first()
-
-        if away_team_id:
-            match.away_team = Team.objects.filter(
-                id=away_team_id,
-                user=request.user
-            ).first()
-
         match.status = 'analyzing'
         match.save()
 
-        create_dummy_analysis_result(match)
-        return redirect('analysis_report', match_id=match.id)
+        start_analysis_job(match.id)
+        messages.info(request, '분석 요청이 접수되었습니다. 완료되면 리포트에서 결과 영상을 확인할 수 있습니다.')
+        return redirect('analysis_status', match_id=match.id)
 
     return render(request, 'analyzer/analysis_request.html', {'match': match})
 
@@ -173,7 +223,11 @@ def request_analysis(request, match_id):
 @login_required
 def analysis_status(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
-    return render(request, 'analyzer/analysis_status.html', {'match': match})
+    analysis = AnalysisResult.objects.filter(match=match).first()
+    return render(request, 'analyzer/analysis_status.html', {
+        'match': match,
+        'analysis': analysis,
+    })
 
 
 @login_required
@@ -181,8 +235,12 @@ def generate_report(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
 
     if request.method == 'POST':
-        create_dummy_analysis_result(match)
-        return redirect('analysis_report', match_id=match.id)
+        match.status = 'analyzing'
+        match.save()
+
+        start_analysis_job(match.id)
+        messages.info(request, '분석 요청이 접수되었습니다.')
+        return redirect('analysis_status', match_id=match.id)
 
     return redirect('analysis_status', match_id=match.id)
 
@@ -191,23 +249,52 @@ def generate_report(request, match_id):
 def analysis_report(request, match_id):
     match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
     analysis = get_object_or_404(AnalysisResult, match=match)
-    players = analysis.players.all()
-
-    report_settings = request.session.get('report_settings', {
-        'show_tracking': True,
-        'show_path': True,
-        'show_topview': True,
-        'show_speed': True,
-        'show_summary': True,
-        'heatmap_opacity': 60,
-    })
+    _sync_analysis_videos(match, analysis)
+    fotmob_report = load_fotmob_report(analysis.team_stats)
+    team_ids = load_team_ids(analysis.analyzer_team_ids)
+    assignments = {
+        (result.track_group, result.track_id): result
+        for result in analysis.players.filter(track_id__isnull=False)
+    }
+    team_id_sections = build_team_id_sections(team_ids, fotmob_report)
+    for section in team_id_sections:
+        section['player_options'] = build_fotmob_player_options(fotmob_report, section['group'])
+        for entry in section['entries']:
+            assignment = assignments.get((section['group'], entry['id']))
+            entry['assigned_player_name'] = assignment.player_name if assignment else ''
 
     return render(request, 'analyzer/analysis_report.html', {
         'match': match,
         'analysis': analysis,
-        'players': players,
-        'report_settings': report_settings,
+        'fotmob_report': fotmob_report,
+        'fotmob_rows': build_fotmob_table(fotmob_report),
+        'team_id_sections': team_id_sections,
+        'referee_ids': sorted(item.get('id') for item in team_ids.get('referee_ids', []) if isinstance(item, dict) and 'id' in item),
     })
+
+
+def _sync_analysis_videos(match, analysis) -> None:
+    needs_sync = not analysis.detected_video or not analysis.topview_video
+    if analysis.detected_video and not analysis.detected_video.storage.exists(analysis.detected_video.name):
+        needs_sync = True
+    if analysis.topview_video and not analysis.topview_video.storage.exists(analysis.topview_video.name):
+        needs_sync = True
+
+    if not needs_sync:
+        return
+
+    try:
+        result = import_analyzer_result_videos(match)
+    except AnalyzerRunError:
+        return
+
+    analysis.detected_video.name = result.detected_video_name
+    analysis.topview_video.name = result.topview_video_name
+    if result.team_ids:
+        analysis.analyzer_team_ids = dump_team_ids(result.team_ids)
+        analysis.save(update_fields=['detected_video', 'topview_video', 'analyzer_team_ids'])
+    else:
+        analysis.save(update_fields=['detected_video', 'topview_video'])
 
 
 @login_required
@@ -216,27 +303,23 @@ def update_report_info(request, match_id):
     analysis = get_object_or_404(AnalysisResult, match=match)
 
     if request.method == 'POST':
-        url = request.POST.get('match_info_url', '')
+        url = request.POST.get('match_info_url', '').strip()
         analysis.match_info_url = url
 
         if url:
-            home_name = match.home_team.name if match.home_team else '홈팀'
-            away_name = match.away_team.name if match.away_team else '원정팀'
+            try:
+                fotmob_report = crawl_fotmob_report(url)
+                home_team = fotmob_report.get('home_team', 'HOME')
+                away_team = fotmob_report.get('away_team', 'AWAY')
+                score = fotmob_report.get('score') or 'N/A'
 
-            analysis.score_info = f'{home_name} 2 : 1 {away_name}'
-            analysis.goal_records = (
-                f'전반 23분 {home_name} 득점\n'
-                f'후반 12분 {home_name} 득점\n'
-                f'후반 31분 {away_name} 득점'
-            )
-            analysis.lineup_info = (
-                f'{home_name} 라인업: GK, DF, MF, FW\n'
-                f'{away_name} 라인업: GK, DF, MF, FW'
-            )
-            analysis.team_stats = (
-                f'{home_name} 점유율 55%, 슈팅 8회, 패스 성공률 82%\n'
-                f'{away_name} 점유율 45%, 슈팅 6회, 패스 성공률 78%'
-            )
+                analysis.score_info = f'{home_team} {score} {away_team}'
+                analysis.team_stats = dump_fotmob_report(fotmob_report)
+            except Exception as exc:
+                analysis.score_info = ''
+                analysis.team_stats = dump_fotmob_report({
+                    'error': f'FotMob 크롤링 실패: {exc}',
+                })
         else:
             analysis.score_info = ''
             analysis.goal_records = ''
@@ -256,6 +339,53 @@ def save_report(request, match_id):
     if request.method == 'POST':
         analysis.is_saved = True
         analysis.save()
+
+    return redirect('analysis_report', match_id=match.id)
+
+
+@login_required
+def update_track_players(request, match_id):
+    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
+    analysis = get_object_or_404(AnalysisResult, match=match)
+    fotmob_report = load_fotmob_report(analysis.team_stats)
+    team_ids = load_team_ids(analysis.analyzer_team_ids)
+
+    if request.method == 'POST':
+        for section in build_team_id_sections(team_ids, fotmob_report):
+            team_name = section['title']
+            group = section['group']
+
+            for entry in section['entries']:
+                track_id = int(entry['id'])
+                field_name = f'player_{group}_{track_id}'
+                player_name = request.POST.get(field_name, '').strip()
+                valid_names = {
+                    option['value']
+                    for option in build_fotmob_player_options(fotmob_report, group)
+                }
+                result = PlayerResult.objects.filter(
+                    analysis=analysis,
+                    track_group=group,
+                    track_id=track_id,
+                ).first()
+                if result is None:
+                    result = PlayerResult(
+                        analysis=analysis,
+                        track_group=group,
+                        track_id=track_id,
+                        player_name=f'ID {track_id}',
+                        team_name=team_name,
+                    )
+
+                if player_name and player_name in valid_names:
+                    result.player = None
+                    result.player_name = player_name
+                else:
+                    result.player = None
+                    result.player_name = f'ID {track_id}'
+
+                result.team_name = team_name
+                result.save()
 
     return redirect('analysis_report', match_id=match.id)
 
@@ -295,137 +425,6 @@ def delete_match(request, match_id):
         return redirect('match_manage')
 
     return render(request, 'analyzer/match_delete.html', {'match': match})
-
-
-@login_required
-def team_player_manage(request):
-    teams = Team.objects.filter(user=request.user).order_by('-created_at')
-    players = Player.objects.filter(user=request.user).select_related('team').order_by(
-        'team__name',
-        'jersey_number'
-    )
-    analyses = AnalysisResult.objects.filter(
-        match__uploaded_by=request.user
-    ).order_by('-created_at')
-
-    team_form = TeamForm()
-    player_form = PlayerForm(user=request.user)
-
-    if request.method == 'POST':
-        form_type = request.POST.get('form_type')
-
-        if form_type == 'team':
-            team_form = TeamForm(request.POST)
-
-            if team_form.is_valid():
-                team = team_form.save(commit=False)
-                team.user = request.user
-                team.save()
-                return redirect('team_player_manage')
-
-        elif form_type == 'player':
-            player_form = PlayerForm(request.POST, user=request.user)
-
-            if player_form.is_valid():
-                player = player_form.save(commit=False)
-                player.user = request.user
-                player.save()
-                return redirect('team_player_manage')
-
-    return render(request, 'analyzer/team_player_manage.html', {
-        'teams': teams,
-        'players': players,
-        'analyses': analyses,
-        'team_form': team_form,
-        'player_form': player_form,
-    })
-
-
-@login_required
-def edit_team(request, team_id):
-    team = get_object_or_404(Team, id=team_id, user=request.user)
-
-    if request.method == 'POST':
-        form = TeamForm(request.POST, instance=team)
-
-        if form.is_valid():
-            form.save()
-            return redirect('team_player_manage')
-    else:
-        form = TeamForm(instance=team)
-
-    return render(request, 'analyzer/team_edit.html', {
-        'form': form,
-        'team': team,
-    })
-
-
-@login_required
-def delete_team(request, team_id):
-    team = get_object_or_404(Team, id=team_id, user=request.user)
-
-    if request.method == 'POST':
-        team.delete()
-        return redirect('team_player_manage')
-
-    return render(request, 'analyzer/team_delete.html', {'team': team})
-
-
-@login_required
-def edit_player(request, player_id):
-    player = get_object_or_404(Player, id=player_id, user=request.user)
-
-    if request.method == 'POST':
-        form = PlayerForm(request.POST, instance=player, user=request.user)
-
-        if form.is_valid():
-            form.save()
-            return redirect('team_player_manage')
-    else:
-        form = PlayerForm(instance=player, user=request.user)
-
-    return render(request, 'analyzer/player_edit.html', {
-        'form': form,
-        'player': player,
-    })
-
-
-@login_required
-def delete_player(request, player_id):
-    player = get_object_or_404(Player, id=player_id, user=request.user)
-
-    if request.method == 'POST':
-        player.delete()
-        return redirect('team_player_manage')
-
-    return render(request, 'analyzer/player_delete.html', {'player': player})
-
-
-@login_required
-def edit_team_players(request, match_id):
-    match = get_object_or_404(Match, id=match_id, uploaded_by=request.user)
-    analysis = get_object_or_404(AnalysisResult, match=match)
-    players = analysis.players.all()
-
-    if request.method == 'POST':
-        for player in players:
-            player.player_name = request.POST.get(
-                f'player_name_{player.id}',
-                player.player_name
-            )
-            player.team_name = request.POST.get(
-                f'team_name_{player.id}',
-                player.team_name
-            )
-            player.save()
-
-        return redirect('analysis_report', match_id=match.id)
-
-    return render(request, 'analyzer/team_player_edit.html', {
-        'match': match,
-        'analysis': analysis,
-        'players': players,
-    })
 
 
 @login_required

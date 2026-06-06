@@ -20,14 +20,6 @@
             <p><strong>업로드 시간:</strong> {{ match.created_at }}</p>
             <p><strong>영상 파일:</strong> {{ match.video.name }}</p>
 
-            {% if match.home_team %}
-                <p><strong>홈팀:</strong> {{ match.home_team.name }}</p>
-            {% endif %}
-
-            {% if match.away_team %}
-                <p><strong>원정팀:</strong> {{ match.away_team.name }}</p>
-            {% endif %}
-
             <video width="500" controls>
                 <source src="{{ match.video.url }}">
                 브라우저에서 영상을 재생할 수 없습니다.

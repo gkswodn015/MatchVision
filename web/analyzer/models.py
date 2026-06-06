@@ -28,6 +28,7 @@ class Match(models.Model):
         ('uploaded', '업로드 완료'),
         ('analyzing', '분석 중'),
         ('completed', '분석 완료'),
+        ('failed', '분석 실패'),
     ]
 
     title = models.CharField(max_length=100)
@@ -77,6 +78,12 @@ class AnalysisResult(models.Model):
     lineup_info = models.TextField(blank=True)
     team_stats = models.TextField(blank=True)
 
+    detected_video = models.FileField(upload_to='analysis_results/', blank=True)
+    topview_video = models.FileField(upload_to='analysis_results/', blank=True)
+    analysis_error = models.TextField(blank=True)
+    analysis_log = models.TextField(blank=True)
+    analyzer_team_ids = models.TextField(blank=True)
+
     report_text = models.TextField(blank=True)
     is_saved = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -91,6 +98,9 @@ class PlayerResult(models.Model):
         on_delete=models.CASCADE,
         related_name='players'
     )
+    player = models.ForeignKey(Player, on_delete=models.SET_NULL, null=True, blank=True)
+    track_id = models.PositiveIntegerField(null=True, blank=True)
+    track_group = models.CharField(max_length=20, blank=True)
     player_name = models.CharField(max_length=50)
     team_name = models.CharField(max_length=50)
     distance = models.FloatField(default=0)
