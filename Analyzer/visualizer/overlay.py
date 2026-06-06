@@ -108,13 +108,7 @@ def _track_label(track: dict) -> str:
         "unknown": "U",
     }.get(role, "U")
 
-    parts = [f'{role_tag}#{track["id"]}']
-    if track.get("locked_role"):
-        confidence = int(round(float(track.get("role_confidence", 0.0)) * 100))
-        parts.append(f"{confidence}%")
-    if track.get("goalkeeper_candidate"):
-        parts.append("GK?")
-    return " ".join(parts)
+    return f'{role_tag}#{track["id"]}'
 
 
 def _draw_label(frame, text: str, cx: int, y: int, color: tuple[int, int, int]) -> None:
@@ -150,10 +144,10 @@ def _draw_topview_label(
     color: tuple[int, int, int],
 ) -> None:
     font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = 0.42
+    scale = 0.34
     thickness = 1
     (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
-    pad_x, pad_y = 5, 3
+    pad_x, pad_y = 3, 2
 
     x1 = max(0, min(canvas.shape[1] - tw - pad_x * 2, cx - tw // 2 - pad_x))
     y1 = max(0, min(canvas.shape[0] - th - baseline - pad_y * 2, y - th - pad_y))
