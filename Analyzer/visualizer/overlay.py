@@ -45,7 +45,7 @@ def draw_tracks(frame, tracks: list[dict], speed_stats: dict[int, dict]):
             cv2.LINE_AA,
         )
 
-        label = f'#{t["id"]}'
+        label = _track_label(t)
         _draw_label(frame, label, cx, foot_y + 18, color)
 
 
@@ -67,7 +67,48 @@ def draw_topview_dots(canvas, positions: list[dict], tracks: list[dict]):
         cv2.circle(canvas, (cx, cy), radius, (8, 24, 12), 2, cv2.LINE_AA)
 
         if not is_ball:
-            _draw_topview_label(canvas, f'#{pos["id"]}', cx, cy - radius - 6, color)
+            _draw_topview_label(canvas, _track_label(track), cx, cy - radius - 6, color)
+
+
+def draw_debug_panel(frame, frame_idx: int, calibration_state: dict) -> None:
+    mode = calibration_state.get("mode", "nearest")
+    calib_frame = calibration_state.get("calibration_frame", "-")
+    anchors = calibration_state.get("anchors", 0)
+    text = f"frame {frame_idx} | calib {calib_frame} | {mode} | anchors {anchors}"
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.52
+    thickness = 1
+    (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
+    pad = 8
+    x1, y1 = 8, 8
+    x2, y2 = x1 + tw + pad * 2, y1 + th + baseline + pad * 2
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (18, 18, 18), -1, cv2.LINE_AA)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (90, 90, 90), 1, cv2.LINE_AA)
+    cv2.putText(
+        frame,
+        text,
+        (x1 + pad, y2 - baseline - pad),
+        font,
+        scale,
+        (235, 235, 235),
+        thickness,
+        cv2.LINE_AA,
+    )
+
+
+def _track_label(track: dict) -> str:
+    role = track.get("role", "unknown")
+    role_tag = {
+        "our_team": "H",
+        "opponent": "A",
+        "referee": "R",
+        "goalkeeper_left": "GK",
+        "goalkeeper_right": "GK",
+        "unknown": "U",
+    }.get(role, "U")
+
+    return f'{role_tag}#{track["id"]}'
 
 
 def _draw_label(frame, text: str, cx: int, y: int, color: tuple[int, int, int]) -> None:
@@ -103,10 +144,10 @@ def _draw_topview_label(
     color: tuple[int, int, int],
 ) -> None:
     font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = 0.42
+    scale = 0.34
     thickness = 1
     (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
-    pad_x, pad_y = 5, 3
+    pad_x, pad_y = 3, 2
 
     x1 = max(0, min(canvas.shape[1] - tw - pad_x * 2, cx - tw // 2 - pad_x))
     y1 = max(0, min(canvas.shape[0] - th - baseline - pad_y * 2, y - th - pad_y))
