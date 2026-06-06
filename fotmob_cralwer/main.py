@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import json
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -48,6 +49,7 @@ def crawl_match_stats(url, wait_seconds=3):
         result["stats"].update(_extract_list_stats(soup))
         result["stats"].update(_extract_text_stats(soup))
         result["stats"]["possession"] = _extract_possession(html)
+        result["lineups"] = _extract_lineups(soup)
 
         return result
     finally:
@@ -83,6 +85,54 @@ def _empty_result(url):
             "corners": ["N/A", "N/A"],
             "offsides": ["N/A", "N/A"],
         },
+        "lineups": {
+            "home": {"starters": [], "subs": []},
+            "away": {"starters": [], "subs": []},
+        },
+    }
+
+
+def _extract_lineups(soup):
+    script = soup.find("script", id="__NEXT_DATA__")
+    if script is None or not script.string:
+        return {
+            "home": {"starters": [], "subs": []},
+            "away": {"starters": [], "subs": []},
+        }
+
+    try:
+        data = json.loads(script.string)
+    except json.JSONDecodeError:
+        return {
+            "home": {"starters": [], "subs": []},
+            "away": {"starters": [], "subs": []},
+        }
+
+    lineup = (
+        data.get("props", {})
+        .get("pageProps", {})
+        .get("content", {})
+        .get("lineup", {})
+    )
+    return {
+        "home": _extract_team_lineup(lineup.get("homeTeam", {})),
+        "away": _extract_team_lineup(lineup.get("awayTeam", {})),
+    }
+
+
+def _extract_team_lineup(team_data):
+    return {
+        "starters": [_player_summary(player) for player in team_data.get("starters", [])],
+        "subs": [_player_summary(player) for player in team_data.get("subs", [])],
+    }
+
+
+def _player_summary(player):
+    return {
+        "id": player.get("id"),
+        "name": player.get("name") or "Unknown player",
+        "shirt_number": player.get("shirtNumber") or "",
+        "position_id": player.get("positionId") or player.get("usualPlayingPositionId"),
     }
 
 

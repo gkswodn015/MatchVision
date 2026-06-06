@@ -10,11 +10,11 @@ from .forms import (
     SignUpForm,
     MatchUploadForm,
     MatchEditForm,
-    PlayerForm,
 )
-from .models import Match, AnalysisResult, PlayerResult, Player
+from .models import Match, AnalysisResult, PlayerResult
 from .services.analyzer_runner import AnalyzerRunError, import_analyzer_result_videos, run_analyzer_for_match
 from .services.fotmob_report import (
+    build_fotmob_player_options,
     build_fotmob_table,
     crawl_fotmob_report,
     dump_fotmob_report,
@@ -258,9 +258,9 @@ def analysis_report(request, match_id):
     }
     team_id_sections = build_team_id_sections(team_ids, fotmob_report)
     for section in team_id_sections:
+        section['player_options'] = build_fotmob_player_options(fotmob_report, section['group'])
         for entry in section['entries']:
             assignment = assignments.get((section['group'], entry['id']))
-            entry['assigned_player_id'] = assignment.player_id if assignment else None
             entry['assigned_player_name'] = assignment.player_name if assignment else ''
 
     return render(request, 'analyzer/analysis_report.html', {
@@ -270,7 +270,6 @@ def analysis_report(request, match_id):
         'fotmob_rows': build_fotmob_table(fotmob_report),
         'team_id_sections': team_id_sections,
         'referee_ids': sorted(item.get('id') for item in team_ids.get('referee_ids', []) if isinstance(item, dict) and 'id' in item),
-        'players': Player.objects.filter(user=request.user).order_by('jersey_number', 'name'),
     })
 
 
@@ -359,7 +358,11 @@ def update_track_players(request, match_id):
             for entry in section['entries']:
                 track_id = int(entry['id'])
                 field_name = f'player_{group}_{track_id}'
-                player_id = request.POST.get(field_name, '')
+                player_name = request.POST.get(field_name, '').strip()
+                valid_names = {
+                    option['value']
+                    for option in build_fotmob_player_options(fotmob_report, group)
+                }
                 result = PlayerResult.objects.filter(
                     analysis=analysis,
                     track_group=group,
@@ -374,12 +377,9 @@ def update_track_players(request, match_id):
                         team_name=team_name,
                     )
 
-                if player_id:
-                    player = Player.objects.filter(id=player_id, user=request.user).first()
-                    if player is None:
-                        continue
-                    result.player = player
-                    result.player_name = player.name
+                if player_name and player_name in valid_names:
+                    result.player = None
+                    result.player_name = player_name
                 else:
                     result.player = None
                     result.player_name = f'ID {track_id}'
@@ -388,35 +388,6 @@ def update_track_players(request, match_id):
                 result.save()
 
     return redirect('analysis_report', match_id=match.id)
-
-
-@login_required
-def player_manage(request):
-    if request.method == 'POST':
-        form = PlayerForm(request.POST)
-        if form.is_valid():
-            player = form.save(commit=False)
-            player.user = request.user
-            player.save()
-            return redirect('player_manage')
-    else:
-        form = PlayerForm()
-
-    players = Player.objects.filter(user=request.user).order_by('jersey_number', 'name')
-    return render(request, 'analyzer/player_manage.html', {
-        'form': form,
-        'players': players,
-    })
-
-
-@login_required
-def delete_player(request, player_id):
-    player = get_object_or_404(Player, id=player_id, user=request.user)
-
-    if request.method == 'POST':
-        player.delete()
-
-    return redirect('player_manage')
 
 
 @login_required

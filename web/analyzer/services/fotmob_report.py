@@ -54,3 +54,42 @@ def build_fotmob_table(report):
         })
 
     return rows
+
+
+def build_fotmob_player_options(report, group):
+    if not report:
+        return []
+
+    side = "home" if group == "home" else "away"
+    lineups = report.get("lineups", {})
+    team_lineup = lineups.get(side, {}) if isinstance(lineups, dict) else {}
+
+    options = []
+    options.extend(_player_options(team_lineup.get("starters", []), "선발"))
+    options.extend(_player_options(team_lineup.get("subs", []), "교체"))
+    return options
+
+
+def _player_options(players, squad_type):
+    options = []
+    if not isinstance(players, list):
+        return options
+
+    for player in players:
+        if not isinstance(player, dict):
+            continue
+        name = player.get("name")
+        if not name:
+            continue
+        shirt_number = player.get("shirt_number") or player.get("shirtNumber") or ""
+        label = f"#{shirt_number} {name}" if shirt_number else name
+        options.append({
+            "value": name,
+            "label": f"{label} ({squad_type})",
+            "name": name,
+            "jersey_number": shirt_number,
+            "shirt_number": shirt_number,
+            "squad_type": squad_type,
+        })
+
+    return options

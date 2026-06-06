@@ -22,8 +22,5 @@ urlpatterns = [
     path('manage/<int:match_id>/edit/', views.edit_match, name='edit_match'),
     path('manage/<int:match_id>/delete/', views.delete_match, name='delete_match'),
 
-    path('players/', views.player_manage, name='player_manage'),
-    path('players/<int:player_id>/delete/', views.delete_player, name='delete_player'),
-
     path('settings/', views.settings_page, name='settings_page'),
 ]
